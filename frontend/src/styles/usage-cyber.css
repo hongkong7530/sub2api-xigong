@@ -1,0 +1,38 @@
+/* 高速是实测速率而不是档位承诺；装饰置于正文后，不挡点击或改变行高。 */
+.usage-ledger { --speed-gold:#ffc966; --speed-pink:#ff6fbd; --speed-spark:#fff3c4; --speed-surface:linear-gradient(105deg,#fff4d5c9,#ffe5f1a6 55%,#fff5db85); }
+.dark .usage-ledger { --speed-surface:linear-gradient(105deg,#4a341c91,#4b1c3a91 55%,#402b2091); }
+.usage-ledger .usage-row--high-speed { position:relative; isolation:isolate; background:var(--speed-surface); box-shadow:inset 3px 0 var(--speed-gold),inset -2px 0 var(--speed-pink); }
+.usage-ledger .usage-row--high-speed > td { position:relative; z-index:1; background-color:transparent; }
+.usage-ledger .usage-row--high-speed > td { overflow:hidden; }
+.usage-ledger .usage-row--high-speed > td.sticky-col { position:sticky; z-index:2; background:var(--speed-surface),#fff; }
+.dark .usage-ledger .usage-row--high-speed > td.sticky-col { background:var(--speed-surface),#101827; }
+.usage-ledger .usage-row--high-speed > td > * { position:relative; z-index:1; }
+/* tr生成的伪元素会形成匿名表格单元格；光层必须属于td或手机卡片。 */
+.usage-ledger .usage-row--high-speed > td::before,.usage-ledger .usage-row--high-speed > td::after,
+.usage-ledger div.usage-row--high-speed::before,.usage-ledger div.usage-row--high-speed::after { content:''; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:0; }
+.usage-ledger .usage-row--high-speed > td::before,.usage-ledger div.usage-row--high-speed::before { background:linear-gradient(112deg,transparent 18%,#ffd57c25 34%,#fff0c869 44%,#ff7ccc45 53%,transparent 68%); transform:translateX(-30%) scaleX(.4); }
+.usage-ledger .usage-row--high-speed > td::after,.usage-ledger div.usage-row--high-speed::after { background-image:radial-gradient(circle at 8% 26%,var(--speed-spark) 0 1px,transparent 2px),radial-gradient(circle at 24% 72%,var(--speed-gold) 0 1px,transparent 2px),radial-gradient(circle at 47% 21%,var(--speed-pink) 0 1.5px,transparent 2.5px),radial-gradient(circle at 69% 76%,var(--speed-spark) 0 1px,transparent 2px),radial-gradient(circle at 89% 32%,var(--speed-gold) 0 1px,transparent 2px); }
+.usage-output-rate { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.usage-output-rate--high { color:#a53668; text-shadow:0 0 12px #f9ae8440; }
+.dark .usage-output-rate--high { color:#ffd498; text-shadow:0 0 12px #ff83c070; }
+.usage-speed-star { width:12px; height:12px; flex-shrink:0; color:var(--speed-pink); }
+@media(prefers-reduced-motion:no-preference) {
+ .usage-ledger .usage-row--high-speed > td::before,.usage-ledger div.usage-row--high-speed::before { animation:usage-gold-sweep 2.35s .1s 2; }
+ .usage-ledger .usage-row--high-speed > td::after,.usage-ledger div.usage-row--high-speed::after { animation:usage-gold-dust 2.35s .1s 2; }
+}
+@keyframes usage-gold-sweep { 0% { opacity:0; transform:translateX(-30%) scaleX(.4); } 20% { opacity:.8; } 65% { opacity:.7; } 100% { opacity:0; transform:translateX(30%) scaleX(.4); } }
+@keyframes usage-gold-dust { 0%,100% { opacity:0; transform:translateY(3px); } 35% { opacity:.75; } 75% { opacity:.3; transform:translateY(-3px); } }
+html[data-xg-motion='off'] .usage-ledger .usage-row--high-speed > td::before,html[data-xg-motion='off'] .usage-ledger .usage-row--high-speed > td::after,html[data-xg-motion='off'] .usage-ledger div.usage-row--high-speed::before,html[data-xg-motion='off'] .usage-ledger div.usage-row--high-speed::after { animation:none; }
+@media(prefers-reduced-motion:reduce) { .usage-ledger .usage-row--high-speed > td::before,.usage-ledger .usage-row--high-speed > td::after,.usage-ledger div.usage-row--high-speed::before,.usage-ledger div.usage-row--high-speed::after { animation:none; } }
+@media(max-width:767px) { .usage-ledger .usage-row--high-speed { overflow:hidden; border-color:#e9a9c4; border-radius:14px; } .dark .usage-ledger .usage-row--high-speed { border-color:#bd6b8b; } .usage-ledger .usage-row--high-speed > div { position:relative; z-index:1; } }
+/* 300档为独立实测速率层级：鎏金主场、电紫切面、冰青边光，正文不参与闪烁。 */
+.usage-ledger .usage-row--golden { --speed-gold:#ffce45; --speed-pink:#a33cff; --speed-spark:#fff7a6; --speed-surface:linear-gradient(110deg,#ffe99bed,#fff4d9e8 32%,#f1d5ffe8 65%,#b9fff3c9); box-shadow:inset 4px 0 #ffc627,inset -3px 0 #47e6d0,inset 0 1px #e8ae19,inset 0 -1px #c27df0,0 0 22px #ffc62738; }
+.dark .usage-ledger .usage-row--golden { --speed-surface:linear-gradient(110deg,#654516e8,#483117ed 32%,#4a1d60eb 65%,#153d40eb); box-shadow:inset 4px 0 #ffd744,inset -3px 0 #5dffdd,inset 0 1px #ffdc6caa,inset 0 -1px #d58aff99,0 0 24px #ffcf4430; }
+.usage-ledger .usage-row--golden > td::before,.usage-ledger div.usage-row--golden::before { background:linear-gradient(112deg,transparent 12%,#ffd83a55 24%,#fff9dacc 43%,#e05bff99 58%,#45ffda66 72%,transparent 86%); }
+.usage-ledger .usage-row--golden > td::after,.usage-ledger div.usage-row--golden::after { background-image:radial-gradient(circle at 9% 22%,#ffdf4f 0 2px,transparent 3px),radial-gradient(circle at 25% 76%,#b137ec 0 1.5px,transparent 2.5px),radial-gradient(circle at 49% 18%,#fff4a5 0 2px,transparent 3px),radial-gradient(circle at 72% 78%,#29d2b6 0 1.5px,transparent 2.5px),radial-gradient(circle at 91% 30%,#ffba22 0 2px,transparent 3px); }
+.usage-output-rate.usage-output-rate--golden { padding:3px 7px; border:1px solid #c9971e; border-radius:6px 2px; background:linear-gradient(110deg,#fff3b9,#ffe89e 58%,#eed0ff); color:#593609; font-weight:850; text-shadow:none; box-shadow:0 0 12px #ffd54b55,inset 0 1px #fff9; }
+.dark .usage-output-rate.usage-output-rate--golden { color:#fff1b0; background:linear-gradient(110deg,#795119,#4a255e); border-color:#ffd667bb; text-shadow:0 0 12px #ffe16c88; box-shadow:0 0 16px #ffd54b50,0 0 24px #c156ff30,inset 0 1px #fff4; }
+.usage-output-rate--golden .usage-speed-star { width:15px; height:15px; color:#8235bc; }
+.dark .usage-output-rate--golden .usage-speed-star { color:#ffdb55; }
+@media(max-width:767px) { .usage-ledger .usage-row--golden { border-color:#d2a13a; } .dark .usage-ledger .usage-row--golden { border-color:#ffdb6599; } }
+

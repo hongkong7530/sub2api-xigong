@@ -1,0 +1,100 @@
+/* 品牌装饰与业务内容分别持有字体、表面和动效，避免图表与金额被像素化。 */
+@font-face {
+  font-family: 'QiuYe Pixel';
+  src: url('/experience/fonts/qiuye-latin.woff2') format('woff2');
+  font-display: swap;
+  unicode-range: U+0000-024F;
+}
+@font-face {
+  font-family: 'QiuYe Pixel';
+  src: url('/experience/fonts/qiuye-cjk.woff2') format('woff2');
+  font-display: swap;
+  unicode-range: U+0250-10FFFF;
+}
+:root {
+  --xg-brand: #0f766e;
+  --xg-accent: #14b8a6;
+  --xg-background: #f8fafc;
+  --xg-surface: #fff;
+  --xg-text: #0f172a;
+  --xg-muted: #475569;
+  --xg-border: #e2e8f0;
+  --xg-glass: rgba(255,255,255,.88);
+  --xg-font-display: 'QiuYe Pixel','PingFang SC','Microsoft YaHei',sans-serif;
+  --xg-radius: 24px;
+  --xg-aurora-purple: #a78bfa;
+  --xg-aurora-green: #34d399;
+}
+.dark {
+  --xg-brand: #5eead4;
+  --xg-background: #020617;
+  --xg-surface: #0f172a;
+  --xg-text: #f1f5f9;
+  --xg-muted: #cbd5e1;
+  --xg-border: #334155;
+  --xg-glass: rgba(15,23,42,.91);
+}
+.xg-display, main h1, main h2, aside nav, .xg-navigation {
+  font-family: var(--xg-font-display);
+  font-weight: 400;
+}
+.xg-glass {
+  background: var(--xg-glass);
+  border: 1px solid var(--xg-border);
+  border-radius: var(--xg-radius);
+  box-shadow: inset 0 1px 0 #ffffff80, 0 16px 48px #02061712;
+}
+@supports (backdrop-filter: blur(12px)) {
+  .xg-glass { backdrop-filter: blur(22px) saturate(1.2); }
+}
+.xg-motion-region { position: relative; min-width: 0; }
+.xg-reveal { animation: xg-resolve .28s ease-out both; }
+@keyframes xg-resolve {
+  from { opacity: .5; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+.xg-focus:focus-visible, a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--xg-accent);
+  outline-offset: 4px;
+}
+.xg-prose { overflow-wrap: anywhere; line-height: 1.85; color: var(--xg-text); }
+.xg-prose :is(h1,h2,h3,h4) { scroll-margin-top: 110px; margin: 1.6em 0 .65em; font-weight: 600; font-family: 'PingFang SC','Microsoft YaHei',sans-serif; }
+.xg-prose h1 { font-size: 2rem; }.xg-prose h2 { font-size: 1.5rem; }.xg-prose h3 { font-size: 1.2rem; }
+.xg-prose p,.xg-prose ul,.xg-prose ol { margin: 1em 0; }
+.xg-prose ul { list-style: disc; padding-left: 1.5em; }.xg-prose ol { list-style: decimal; padding-left: 1.5em; }
+.xg-prose pre { overflow: auto; padding: 1.2rem; border: 1px solid var(--xg-border); border-radius: 12px; background: var(--xg-background); }
+.xg-prose code { font-family: ui-monospace,Consolas,monospace; font-size: .9em; }
+.xg-prose a { color: var(--xg-brand); text-decoration: underline; text-underline-offset: 3px; }
+.xg-prose img { max-width: 100%; height: auto; border-radius: 12px; }
+.xg-prose table { display: block; overflow-x: auto; border-collapse: collapse; }
+.xg-prose th,.xg-prose td { padding: .6em 1em; border: 1px solid var(--xg-border); }
+.xg-prose blockquote { border-left: 3px solid var(--xg-accent); padding-left: 1em; color: var(--xg-muted); }
+.xg-status { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--xg-border); background: var(--xg-surface); }
+@media (max-width: 640px) {
+  input,textarea,select { font-size: max(16px,1em); }
+  .xg-glass { --xg-radius: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
+  .xg-reveal { animation: none; }
+}
+html[data-xg-motion='off'] { scroll-behavior: auto; }
+html[data-xg-motion='off'] .xg-reveal { animation: none; }
+
+/* 所有控制台页面共用的密度与窄屏边界，语义色和业务布局保持原有所有权。 */
+.xg-console-main { min-width: 0; }
+.xg-console-main :is(h1,h2,h3) { overflow-wrap: anywhere; }
+.xg-console-main .card { border-color: var(--xg-border); }
+.xg-console-main :is(td,th) { font-variant-numeric: tabular-nums; }
+.xg-console-main .input:invalid:not(:placeholder-shown):focus { outline-offset: 2px; }
+.xg-console-main button:disabled { cursor: not-allowed; }
+.xg-tab-panel { animation: xg-resolve .28s ease-out; }
+.xg-console-main .table-wrapper { overscroll-behavior-x: contain; }
+@media(max-width:640px) {
+ .modal-content { max-height: calc(100dvh - 24px); }
+ .modal-body { overscroll-behavior: contain; }
+ .modal-footer { flex-wrap: wrap; gap: 8px; }
+ .xg-console-main :is(.btn-icon,.btn-sm) { min-height: 40px; min-width: 40px; }
+}
+@media(prefers-reduced-motion:reduce) { .xg-tab-panel { animation:none; } }
+html[data-xg-motion="off"] .xg-tab-panel { animation:none; }

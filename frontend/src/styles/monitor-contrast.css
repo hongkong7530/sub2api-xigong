@@ -1,0 +1,30 @@
+/* Phone monitor surfaces must not depend on wallpaper luminance for legibility. */
+@media(max-width:767px) {
+ .monitor-card { --monitor-state:#047857; background:#ffffff; border-color:#cbd5e1; backdrop-filter:none; -webkit-backdrop-filter:none; }
+ .dark .monitor-card { --monitor-state:#53e8b5; background:#111e30; border-color:#53647b; }
+ .monitor-card[data-status='degraded'] { --monitor-state:#a16207; }
+ .dark .monitor-card[data-status='degraded'] { --monitor-state:#ffce62; }
+ .monitor-card:is([data-status='failed'],[data-status='error']) { --monitor-state:#c53055; }
+ .dark .monitor-card:is([data-status='failed'],[data-status='error']) { --monitor-state:#ff83a1; }
+ .monitor-card .monitor-card__status { color:var(--monitor-state); background:#f8fafc; border:1px solid currentColor; box-shadow:none; }
+ .dark .monitor-card .monitor-card__status { background:#071424; }
+ .monitor-card:is([data-status=''],[data-status='maintenance']) { --monitor-state:#475569; }
+ .dark .monitor-card:is([data-status=''],[data-status='maintenance']) { --monitor-state:#c4d3e5; }
+ .monitor-card__status::before { content:''; display:inline-block; width:6px; height:6px; margin-right:5px; border-radius:50%; background:currentColor; vertical-align:1px; }
+ .monitor-card .monitor-metrics__label,.monitor-card .monitor-timeline__caption,.monitor-card .monitor-availability__label { color:#475569; font-size:11px; line-height:1.6; letter-spacing:0; }
+ .dark .monitor-card .monitor-metrics__label,.dark .monitor-card .monitor-timeline__caption,.dark .monitor-card .monitor-availability__label { color:#d0deec; }
+ .monitor-card .monitor-metrics__cell { background:#f1f5f9; border-color:#cbd5e1; }
+ .dark .monitor-card .monitor-metrics__cell { background:#0a1525; border-color:#53647b; }
+ .monitor-card__header { flex-wrap:wrap; }
+ .monitor-card__header > .flex-1 { flex-basis:calc(100% - 56px); }
+ .monitor-card__status { margin-left:auto; font-size:12px; }
+ .monitor-card__identity { flex-wrap:wrap; }
+ .monitor-card__identity > span { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+ .monitor-card .monitor-timeline__bar { min-height:4px; border-radius:2px; }
+ .monitor-card .monitor-timeline__bar.bg-emerald-500 { background:#059669; }
+ .monitor-card .monitor-timeline__bar.bg-amber-500 { background:#d97706; }
+ .monitor-card .monitor-timeline__bar.bg-red-500 { background:#e11d48; }
+ .dark .monitor-card .monitor-timeline__bar.bg-emerald-500 { background:#34d399; }
+ .dark .monitor-card .monitor-timeline__bar.bg-amber-500 { background:#fbbf24; }
+ .dark .monitor-card .monitor-timeline__bar.bg-red-500 { background:#fb7185; }
+}

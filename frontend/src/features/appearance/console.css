@@ -1,0 +1,92 @@
+/* 场景变量只在共享壳内生效，不让首页或未保存预览改写全局主题。 */
+.experience-shell {
+  --scene-floor:#edf4f7; --scene-floor-soft:#eff7f9a6; --scene-wash:#d9f2ee42; --scene-shade:#ecf5fc;
+  --scene-rgb:250 254 255; --scene-ink:#152e40; --scene-muted:#476171; --scene-edge:#ffffffb3;
+  --scene-line:#7197a333; --scene-field:#ffffffde; --scene-heading:#125f62; --scene-secondary:#825381;
+  --scene-shadow:#133d5710; --scene-opacity:.72; --scene-blur:12px; --scene-dim:.18;
+  --xg-text:var(--scene-ink); --xg-muted:var(--scene-muted); --xg-border:var(--scene-line); --xg-surface:var(--scene-field); --xg-background:var(--scene-floor);
+  position:relative; isolation:isolate; min-height:100svh; min-width:0; color:var(--xg-text); background:var(--xg-background);
+}
+:where(.dark) .experience-shell:not([data-theme='light']), .experience-shell[data-theme='dark'] {
+  --scene-floor:#081625; --scene-floor-soft:#071321b3; --scene-wash:#09162d30; --scene-shade:#020617;
+  --scene-rgb:13 28 45; --scene-ink:#eef8fc; --scene-muted:#b9d1df; --scene-edge:#d4f5ff50;
+  --scene-line:#b9daed2e; --scene-field:#132a40ed; --scene-heading:#a9f2df; --scene-secondary:#e2bcf0;
+  --scene-shadow:#00000014;
+}
+.experience-shell--enabled { --xg-text:var(--scene-ink); --xg-muted:var(--scene-muted); --xg-border:var(--scene-line); --xg-surface:var(--scene-field); --xg-background:var(--scene-floor); --xg-glass:rgb(var(--scene-rgb) / var(--scene-opacity)); color:var(--scene-ink); background:var(--scene-floor); }
+.experience-shell__scene { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+.experience-shell--preview { min-height:0; border-radius:24px; }
+.experience-shell--preview .experience-shell__scene { position:absolute; border-radius:inherit; overflow:hidden; }
+
+.experience-shell--enabled :is(.card,.xg-glass,.glass-card,.card-glass,.scene-surface) {
+  background:linear-gradient(125deg,#ffffff14,transparent 65%),rgb(var(--scene-rgb) / var(--scene-opacity));
+  color:var(--scene-ink);
+  border:1px solid var(--scene-edge); border-radius:24px; box-shadow:inset 0 1px #ffffff66,inset 0 -1px #c2e6ef20,0 10px 32px var(--scene-shadow);
+  backdrop-filter:blur(var(--scene-blur)) saturate(1.2); -webkit-backdrop-filter:blur(var(--scene-blur)) saturate(1.2);
+  transition:border-color .18s,background-color .18s;
+}
+/* 内部控件和嵌套表面只加阅读衬底，不重复采样祖先的玻璃。 */
+.experience-shell--enabled :is(.card,.xg-glass,.scene-surface) :is(.card,.xg-glass,.glass,.glass-card,.card-glass) { backdrop-filter:none; -webkit-backdrop-filter:none; background:rgb(var(--scene-rgb) / .6); box-shadow:inset 0 1px #ffffff30; border-radius:16px; }
+.experience-shell--enabled :is(.input,.select,.textarea) { background:var(--scene-field); border-color:var(--scene-line); color:var(--scene-ink); }
+.experience-shell--enabled :is(.input,.select,.textarea)::placeholder { color:var(--scene-muted); opacity:.8; }
+.experience-shell--enabled .sidebar { background:rgb(var(--scene-rgb) / .8); backdrop-filter:blur(var(--scene-blur)) saturate(1.15); -webkit-backdrop-filter:blur(var(--scene-blur)) saturate(1.15); border-right-color:var(--scene-edge); box-shadow:inset -1px 0 #ffffff35; }
+.experience-shell--enabled .scene-header { background:rgb(var(--scene-rgb) / .65); border-color:var(--scene-edge); backdrop-filter:blur(var(--scene-blur)); -webkit-backdrop-filter:blur(var(--scene-blur)); }
+.scene-header > :not(.console-optics) { position:relative; z-index:1; }
+.experience-shell--enabled .sidebar-link-active { background:linear-gradient(110deg,#14b8a621,#a78bfa16); box-shadow:inset 3px 0 var(--xg-accent); }
+.experience-shell--color :where(.xg-console-main h1,.scene-title,.sidebar-brand-title,.scene-header h1) { color:var(--scene-heading); }
+.experience-shell--color :where(.xg-console-main h2,.scene-section-title) { color:var(--scene-secondary); }
+.experience-shell--color :where(.sidebar-brand-title,.scene-title) { background:linear-gradient(110deg,var(--scene-heading) 10%,var(--scene-secondary) 95%); background-clip:text; -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.experience-shell--enabled :is(.card-header,.card-footer) { border-color:var(--scene-line); }
+.experience-shell--enabled .table-wrapper { background:rgb(var(--scene-rgb) / .25); border-color:var(--scene-line); }
+.experience-shell--enabled td { font-variant-numeric:tabular-nums; }
+.experience-shell--enabled .btn-primary { background:linear-gradient(135deg,#0f766e,#11857a); color:#fff; box-shadow:inset 0 1px #ffffff40,0 3px 10px #0f766e18; }
+.experience-shell--enabled .btn-secondary { background:var(--scene-field); color:var(--scene-ink); border-color:var(--scene-line); }
+.experience-shell--enabled :is(a,button,input,select,textarea,summary):focus-visible { outline:2px solid var(--xg-accent); outline-offset:3px; }
+.experience-shell--enabled .btn { transition:transform .16s,opacity .16s,background-color .16s; }
+.scene-motion-toggle { position:fixed; bottom:18px; right:18px; z-index:40; display:flex; align-items:center; gap:8px; min-height:44px; padding:10px 15px; border:1px solid var(--scene-edge); border-radius:16px; background:var(--scene-field); color:var(--scene-ink); font-size:12px; box-shadow:0 4px 18px var(--scene-shadow); }
+.scene-motion-toggle > span:first-child { font-size:16px; width:18px; text-align:center; }
+.experience-shell--auth { padding-bottom:68px; }
+.experience-shell--solid.experience-shell--enabled :is(.card,.xg-glass,.glass-card,.card-glass,.scene-surface,.sidebar,.scene-header),.experience-shell--solid .console-optics { background:var(--scene-field); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.experience-shell--solid .console-optics { display:none; }
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  .experience-shell--enabled :is(.card,.xg-glass,.scene-surface,.sidebar,.scene-header) { background:var(--scene-field); }
+}
+@media(prefers-reduced-transparency:reduce) {
+  .experience-shell--enabled :is(.card,.xg-glass,.glass-card,.card-glass,.scene-surface,.sidebar,.scene-header) { background:var(--scene-floor); backdrop-filter:none; -webkit-backdrop-filter:none; }
+}
+@media(max-width:640px) {
+  .experience-shell--enabled :is(.card,.xg-glass,.scene-surface) { border-radius:18px; background:rgb(var(--scene-rgb) / max(var(--scene-opacity),.9)); color:var(--scene-ink); }
+  .experience-shell--enabled :is(.card,.scene-surface).text-white { color:var(--scene-ink); }
+  .experience-shell--enabled input,.experience-shell--enabled select,.experience-shell--enabled textarea { font-size:16px; }
+  .scene-motion-toggle { bottom:12px; right:12px; }
+  .experience-shell--enabled :is(.btn-icon,.sidebar-link) { min-height:44px; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .experience-shell--flow :is(.card-hover):hover { transform:translateY(-2px); }
+}
+.experience-shell[data-motion='off'] .card-hover:hover { transform:none; }
+/* 大阅读面与固定侧栏不重复采样流动顶栏；通透底色保留，光学预算集中于小面积镜面。 */
+.experience-shell--console > .sidebar,
+.experience-shell--console .xg-console-main :is(.card,.glass-card,.card-glass,.scene-surface) {
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.experience-shell--console .xg-console-main .experience-shell--preview .scene-surface {
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.experience-shell--console .xg-console-main .experience-shell--preview .scene-header {
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+
+/* 草稿壳是独立的材质边界；外层已保存的开关不能穿透这里。 */
+.experience-shell--preview { --preview-title:var(--scene-ink); --preview-section:var(--scene-ink); --preview-title-image:none; --preview-title-fill:currentColor; color-scheme:light; }
+.experience-shell--preview[data-theme="dark"] { color-scheme:dark; }
+.experience-shell--preview.experience-shell--color { --preview-title:var(--scene-heading); --preview-section:var(--scene-secondary); --preview-title-image:linear-gradient(110deg,var(--scene-heading),var(--scene-secondary)); --preview-title-fill:transparent; }
+.experience-shell .experience-shell--preview .scene-title { color:var(--preview-title); background:var(--preview-title-image); background-clip:text; -webkit-background-clip:text; -webkit-text-fill-color:var(--preview-title-fill); }
+.experience-shell .experience-shell--preview .scene-section-title { color:var(--preview-section); }
+.appearance-preview .experience-shell--preview:not(.experience-shell--enabled) :is(.scene-surface,.scene-header) { background:var(--scene-floor); color:var(--scene-ink); border:1px solid var(--scene-line); box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+.experience-shell--preview.experience-shell--enabled .scene-surface { background:linear-gradient(125deg,#ffffff14,transparent 65%),rgb(var(--scene-rgb) / var(--scene-opacity)); backdrop-filter:blur(var(--scene-blur)) saturate(1.2); -webkit-backdrop-filter:blur(var(--scene-blur)) saturate(1.2); }
+.experience-shell--preview.experience-shell--enabled .scene-header { background:rgb(var(--scene-rgb) / .65); }
+.experience-shell--preview.experience-shell--solid :is(.scene-surface,.scene-header) { background:var(--scene-floor); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.experience-shell--preview .input { color:var(--scene-ink); background:var(--scene-field); }
+.experience-shell--preview option { color:var(--scene-ink); background:var(--scene-floor); }
+@media(prefers-reduced-transparency:reduce) { .experience-shell--preview.experience-shell--enabled :is(.scene-surface,.scene-header) { background:var(--scene-floor); backdrop-filter:none; -webkit-backdrop-filter:none; } }

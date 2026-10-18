@@ -1,0 +1,82 @@
+{
+  "font": {
+    "family": "QiuYeYuanTi 16",
+    "weight": 400,
+    "glyphs": 13646
+  },
+  "wallpapers": [
+    {
+      "id": "scene-1",
+      "source": "Wallpaper Alchemy - 清霄鸣潮4K壁纸.jpg",
+      "sha256": "577f59a1d9105a2d1fe6715a97a08dedb9fcdf741f2a225063b2282849887b54",
+      "width": 5600,
+      "height": 2400,
+      "focus_x": 70,
+      "focus_y": 45,
+      "desktop": "/experience/wallpapers/scene-1-desktop.webp",
+      "mobile": "/experience/wallpapers/scene-1-mobile.webp",
+      "thumb": "/experience/wallpapers/scene-1-thumb.webp"
+    },
+    {
+      "id": "scene-2",
+      "source": "Wallpaper Alchemy - 艾米斯 vs 水晶魔像 – 鸣潮壁纸.jpg",
+      "sha256": "5b1140ecd25b9b92308de844ede676f713ec04030eb821541759308314f28a92",
+      "width": 3840,
+      "height": 2160,
+      "focus_x": 70,
+      "focus_y": 45,
+      "desktop": "/experience/wallpapers/scene-2-desktop.webp",
+      "mobile": "/experience/wallpapers/scene-2-mobile.webp",
+      "thumb": "/experience/wallpapers/scene-2-thumb.webp"
+    },
+    {
+      "id": "scene-3",
+      "source": "Wallpaper Alchemy - 青霄鸣潮4K动漫壁纸.jpg",
+      "sha256": "d34961ae2d0a4dc145bc4e6eaa8349e7e67ea0e7fd59501037c511f7acdddc62",
+      "width": 10240,
+      "height": 5760,
+      "focus_x": 70,
+      "focus_y": 45,
+      "desktop": "/experience/wallpapers/scene-3-desktop.webp",
+      "mobile": "/experience/wallpapers/scene-3-mobile.webp",
+      "thumb": "/experience/wallpapers/scene-3-thumb.webp"
+    },
+    {
+      "id": "scene-4",
+      "source": "Wallpaper Alchemy - 鸣潮卿霄4K壁纸.jpg",
+      "sha256": "6446f34f6e3bc119dff564351aa32e44de14db792b611869833f624458635800",
+      "width": 4386,
+      "height": 8109,
+      "focus_x": 70,
+      "focus_y": 45,
+      "desktop": "/experience/wallpapers/scene-4-desktop.webp",
+      "mobile": "/experience/wallpapers/scene-4-mobile.webp",
+      "thumb": "/experience/wallpapers/scene-4-thumb.webp"
+    },
+    {
+      "id": "scene-5",
+      "source": "Wallpaper Alchemy - 鸣潮青霄4K动漫壁纸.jpg",
+      "sha256": "3160a7339954678b50946ee008bd536a9458176bb1f3317bc86519acfd6c0d8f",
+      "width": 10240,
+      "height": 5760,
+      "focus_x": 70,
+      "focus_y": 45,
+      "desktop": "/experience/wallpapers/scene-5-desktop.webp",
+      "mobile": "/experience/wallpapers/scene-5-mobile.webp",
+      "thumb": "/experience/wallpapers/scene-5-thumb.webp"
+    },
+    {
+      "id": "scene-6",
+      "source": "Wallpaper Alchemy - 鸣潮青霄4K壁纸.jpg",
+      "sha256": "98cedbbf497053d6febf60ff27dc492dd5534778a4dabcf0b2b0a91095ec5770",
+      "width": 4500,
+      "height": 8000,
+      "focus_x": 70,
+      "focus_y": 45,
+      "desktop": "/experience/wallpapers/scene-6-desktop.webp",
+      "mobile": "/experience/wallpapers/scene-6-mobile.webp",
+      "thumb": "/experience/wallpapers/scene-6-thumb.webp"
+    }
+  ],
+  "wallpaper_license": "Maintainer-supplied; maintainer confirmed official-source free-commercial-use permission on 2026-10-19. Third-party artwork is not relicensed under LGPL; see docs/ASSETS.md."
+}

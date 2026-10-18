@@ -1,0 +1,1 @@
+Placeholder so `//go:embed all:dist` always has a match before the frontend is built.

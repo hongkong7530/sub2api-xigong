@@ -1,0 +1,82 @@
+[
+  {
+    "file": "home-desktop.png",
+    "url": "https://xigong.cloud/home",
+    "captured_at": "2026-10-18T16:21:59.183785+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "http_status": 200,
+    "title": "Home - 西宫API",
+    "horizontal_overflow": false,
+    "page_errors": [],
+    "sha256": "7545cd280f140cfeb2368ede53bedc0bc1241fd3393cd60373ed092d39c3fb86",
+    "authentication": "anonymous",
+    "mocked_requests": false
+  },
+  {
+    "file": "home-mobile.png",
+    "url": "https://xigong.cloud/home",
+    "captured_at": "2026-10-18T16:22:09.621674+00:00",
+    "viewport": {
+      "width": 393,
+      "height": 852
+    },
+    "http_status": 200,
+    "title": "Home - 西宫API",
+    "horizontal_overflow": false,
+    "page_errors": [],
+    "sha256": "740e1b39791d2c4dc20b676a64d8f4c1d6d0418421054a54dee233136d01da18",
+    "authentication": "anonymous",
+    "mocked_requests": false
+  },
+  {
+    "file": "home-status.png",
+    "url": "https://xigong.cloud/home",
+    "captured_at": "2026-10-18T16:22:24.603033+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1100
+    },
+    "http_status": 200,
+    "title": "Home - 西宫API",
+    "horizontal_overflow": false,
+    "page_errors": [],
+    "sha256": "67ac381e5894350b065b6de1d23a640b4aabdee95af5a20e5f95ae7a4afa5c66",
+    "authentication": "anonymous",
+    "mocked_requests": false
+  },
+  {
+    "file": "model-plaza.png",
+    "url": "https://xigong.cloud/model-plaza",
+    "captured_at": "2026-10-18T16:22:36.149208+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "http_status": 200,
+    "title": "模型广场 - 西宫API",
+    "horizontal_overflow": false,
+    "page_errors": [],
+    "sha256": "35184ffdc55e6dad115b4d585d9ff76f3036349f873dd6517f04d590570a3bf7",
+    "authentication": "anonymous",
+    "mocked_requests": false
+  },
+  {
+    "file": "partners.png",
+    "url": "https://xigong.cloud/home?panel=partners",
+    "captured_at": "2026-10-18T16:22:45.583171+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "http_status": 200,
+    "title": "Home - 西宫API",
+    "horizontal_overflow": false,
+    "page_errors": [],
+    "sha256": "27d8d3e5323e77d8afc268656ea7744f53f54573795e58af4ee1398832a46465",
+    "authentication": "anonymous",
+    "mocked_requests": false
+  }
+]
