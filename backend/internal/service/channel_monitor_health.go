@@ -86,6 +86,10 @@ func (s *ChannelMonitorService) hybridUserDetail(ctx context.Context, m *Channel
 	byModel := make(map[string]*ModelDetail)
 	order := make([]string, 0)
 	for _, d := range detail.Models {
+		// Passive mode must not retain a model's old probe-only status after switching modes.
+		if m.ProbeMode == MonitorProbeModePassive {
+			continue
+		}
 		copy := d
 		copy.Availability7d, copy.Availability15d, copy.Availability30d = 0, 0, 0
 		copy.Samples7d, copy.Samples15d, copy.Samples30d = 0, 0, 0

@@ -261,7 +261,11 @@
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
               <span class="text-gray-400 dark:text-gray-500" :title="t('usage.outputTpsHint')">{{ t('usage.outputTps') }}</span>
-              <span data-testid="output-tps" class="usage-output-rate font-medium tabular-nums text-gray-700 dark:text-gray-300" :class="{ 'usage-output-rate--high': isHighSpeedUsage(row), 'usage-output-rate--golden': isGoldenSpeedUsage(row) }"><svg v-if="isHighSpeedUsage(row)" class="usage-speed-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="m8 0 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z" /></svg>{{ formatUsageOutputRate(row) }}</span>
+              <span data-testid="output-tps" class="usage-output-rate font-medium tabular-nums text-gray-700 dark:text-gray-300" :class="{ 'usage-output-rate--high': isHighSpeedUsage(row), 'usage-output-rate--golden': isGoldenSpeedUsage(row) }"><svg v-if="isHighSpeedUsage(row)" class="usage-speed-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="m8 0 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z" /></svg>{{ formatUsageOutputRate(row) }}<small class="ml-1 text-[10px] text-gray-500">{{ t('usage.rateQuality.' + usageRateQuality(row)) }}</small></span>
+              <span class="text-gray-400 dark:text-gray-500">{{ t('usage.observedWindow') }}</span>
+              <span class="tabular-nums text-gray-600 dark:text-gray-400">{{ row.rate_observation?.window_ms != null ? formatDuration(row.rate_observation.window_ms) : row.output_duration_ms != null ? formatDuration(row.output_duration_ms) : '—' }}</span>
+              <span class="text-gray-400 dark:text-gray-500" :title="t('usage.averageThroughputHint')">{{ t('usage.averageThroughput') }}</span>
+              <span data-testid="average-throughput" class="tabular-nums text-gray-700 dark:text-gray-300">{{ formatUsageAverageThroughput(row) }}</span>
             </div>
           </div>
         </template>
@@ -573,6 +577,8 @@ import {
   durationSeverity,
   firstTokenSeverity,
   formatUsageOutputRate,
+  formatUsageAverageThroughput,
+  usageRateQuality,
   isHighSpeedUsage,
   isGoldenSpeedUsage,
 } from '@/utils/latencyHealth'

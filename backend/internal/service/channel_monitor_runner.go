@@ -171,7 +171,7 @@ func (r *ChannelMonitorRunner) reconcileSchedules() {
 		// 探测正文与 Key 每次执行从数据库读取，无需因此重置计时器。
 		unchanged := current != nil && current.name == m.Name && current.interval == interval && current.jitter == jitter
 		r.mu.Unlock()
-		if !m.Enabled || m.APIKeyDecryptFailed || !unchanged {
+		if !m.Enabled || m.APIKeyDecryptFailed || m.ProbeMode == MonitorProbeModePassive || !unchanged {
 			r.Schedule(m)
 		}
 	}
@@ -208,7 +208,7 @@ func (r *ChannelMonitorRunner) Schedule(m *ChannelMonitor) {
 	if r == nil || m == nil {
 		return
 	}
-	if !m.Enabled || m.APIKeyDecryptFailed {
+	if !m.Enabled || m.APIKeyDecryptFailed || m.ProbeMode == MonitorProbeModePassive {
 		r.Unschedule(m.ID)
 		return
 	}

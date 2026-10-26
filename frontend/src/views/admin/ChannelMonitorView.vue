@@ -69,7 +69,7 @@
           @reload="reload"
           @create="openCreateDialog"
           @manage-templates="showTemplateManager = true"
-          @auto-provision="runAutoProvision"
+          @auto-provision="showAutoProvisionSetup = true"
           @search-input="handleSearch"
         />
       </template>
@@ -177,6 +177,8 @@
       @cancel="showDeleteDialog = false"
     />
 
+    <MonitorAutoProvisionDialog :show="showAutoProvisionSetup" :busy="autoProvisioning" @close="showAutoProvisionSetup = false" @submit="runAutoProvision" />
+
     <MonitorAutoProvisionResultDialog
       :show="showAutoProvisionResult"
       :report="autoProvisionReport"
@@ -219,7 +221,8 @@ import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import MonitorSettingsPanel from '@/features/channel-monitor-v2/MonitorSettingsPanel.vue'
 import MonitorGroupInsightCard from '@/components/admin/monitor/MonitorGroupInsightCard.vue'
 import MonitorAutoProvisionResultDialog from '@/components/admin/monitor/MonitorAutoProvisionResultDialog.vue'
-import type { GroupAutomationReport } from '@/api/admin/channelMonitor'
+import type { GroupAutomationReport, GroupAutomationSelection } from '@/api/admin/channelMonitor'
+import MonitorAutoProvisionDialog from '@/components/admin/monitor/MonitorAutoProvisionDialog.vue'
 import { isChannelMonitorV1Mode } from '@/utils/featureFlags'
 
 const { t } = useI18n()
@@ -266,12 +269,14 @@ const groupInsightGroups = computed(() => {
 const autoProvisioning = ref(false)
 const autoProvisionReport = ref<GroupAutomationReport | null>(null)
 const showAutoProvisionResult = ref(false)
+const showAutoProvisionSetup = ref(false)
 
-async function runAutoProvision() {
+async function runAutoProvision(groups: GroupAutomationSelection[]) {
   if (autoProvisioning.value) return
   autoProvisioning.value = true
   try {
-    autoProvisionReport.value = await adminAPI.channelMonitor.autoProvisionPublicGroups()
+    autoProvisionReport.value = await adminAPI.channelMonitor.autoProvisionPublicGroups(groups)
+    showAutoProvisionSetup.value = false
     showAutoProvisionResult.value = true
     // 完成报告与列表刷新独立：刷新慢或失败不应延长执行状态或丢失报告。
     void reload()
@@ -377,6 +382,7 @@ async function handleRunNow(row: ChannelMonitor) {
     appStore.showError(t('admin.channelMonitor.runFailed'))
     return
   }
+  if (row.probe_mode === 'passive') return
   if (runningId.value != null) return
   runningId.value = row.id
   try {

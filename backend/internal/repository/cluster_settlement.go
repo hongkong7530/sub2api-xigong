@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/cluster"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 var ErrClusterSettlementPending = errors.New("settlement is durably pending; authoritative confirmation unavailable")
@@ -74,7 +75,7 @@ func settlementEvidence(cmd *service.UsageBillingCommand) (*service.UsageBilling
 		ImageInputTokens: u.ImageInputTokens, ImageInputCost: u.ImageInputCost, ImageOutputTokens: u.ImageOutputTokens, ImageOutputCost: u.ImageOutputCost,
 		TotalCost: u.TotalCost, ActualCost: u.ActualCost, RateMultiplier: u.RateMultiplier, AccountRateMultiplier: u.AccountRateMultiplier, AccountStatsCost: u.AccountStatsCost,
 		BillingType: u.BillingType, BillingMode: u.BillingMode, BillingTier: u.BillingTier, RequestType: u.RequestType, Stream: u.Stream, OpenAIWSMode: u.OpenAIWSMode,
-		ServiceTier: u.ServiceTier, ReasoningEffort: u.ReasoningEffort, DurationMs: u.DurationMs, FirstTokenMs: u.FirstTokenMs, OutputDurationMs: u.OutputDurationMs,
+		ServiceTier: u.ServiceTier, ReasoningEffort: u.ReasoningEffort, DurationMs: u.DurationMs, FirstTokenMs: u.FirstTokenMs, OutputDurationMs: u.OutputDurationMs, RateObservation: u.RateObservation,
 		InboundEndpoint: u.InboundEndpoint, UpstreamEndpoint: u.UpstreamEndpoint,
 		ImageCount: u.ImageCount, ImageSize: u.ImageSize, ImageInputSize: u.ImageInputSize, ImageOutputSize: u.ImageOutputSize, ImageSizeSource: u.ImageSizeSource, ImageSizeBreakdown: u.ImageSizeBreakdown,
 		VideoCount: u.VideoCount, VideoResolution: u.VideoResolution, VideoDurationSeconds: u.VideoDurationSeconds, MediaType: u.MediaType,
@@ -171,6 +172,10 @@ func (j *clusterSettlementJournal) save(cmd *service.UsageBillingCommand, data [
 	return nil
 }
 func (r *usageBillingRepository) applyClusterSettlement(ctx context.Context, cmd *service.UsageBillingCommand) (*service.UsageBillingApplyResult, error) {
+	return r.applyClusterSettlementWithConfirmation(ctx, context.WithoutCancel(ctx), cmd)
+}
+
+func (r *usageBillingRepository) applyClusterSettlementWithConfirmation(ctx, confirmation context.Context, cmd *service.UsageBillingCommand) (*service.UsageBillingApplyResult, error) {
 	if r.journal == nil || cmd.ClusterID != r.journal.clusterID || cmd.NodeID != r.journal.nodeID {
 		return nil, fmt.Errorf("cluster settlement journal not provisioned for this node")
 	}
@@ -214,7 +219,7 @@ func (r *usageBillingRepository) applyClusterSettlement(ctx context.Context, cmd
 		return result, nil
 	}
 	// A failed Commit may already be durable. Query the authority before deciding to retry.
-	check, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	check, cancel := context.WithTimeout(confirmation, 3*time.Second)
 	defer cancel()
 	committed, checkErr := r.lookupClusterSettlement(check, evidence)
 	if checkErr == nil && committed {
@@ -231,6 +236,20 @@ func (r *usageBillingRepository) applyClusterSettlement(ctx context.Context, cmd
 	return nil, ErrClusterSettlementPending
 }
 
+// Local evidence and the authority can describe the same monetary obligation.
+// Count identities once and let an authoritative commit supersede local copies.
+const clusterPendingRecoveryCountSQL = `WITH local_pending(event_id,api_key_id) AS (
+ SELECT * FROM unnest($3::text[],$4::bigint[])
+), outstanding AS (
+ SELECT event_id,api_key_id FROM cluster_settlement_events
+ WHERE cluster_id=$1 AND node_id=$2 AND state<>'committed'
+ UNION
+ SELECT l.event_id,l.api_key_id FROM local_pending l
+ WHERE NOT EXISTS(SELECT 1 FROM cluster_settlement_events e
+  WHERE e.cluster_id=$1 AND e.event_id=l.event_id AND e.api_key_id=l.api_key_id AND e.state='committed')
+)
+SELECT count(*) FROM outstanding`
+
 // RecoverClusterSettlements replays only immutable money commands; it never performs model calls.
 func (r *usageBillingRepository) RecoverClusterSettlements(ctx context.Context) (int, error) {
 	if r.journal == nil {
@@ -243,40 +262,103 @@ func (r *usageBillingRepository) RecoverClusterSettlements(ctx context.Context) 
 	if err != nil {
 		return 1, err
 	}
+	completions := make(map[string]string)
+	reservedIDs := make([]string, 0, len(reserved))
+	pending := 0
+	type eventIdentity struct {
+		eventID  string
+		apiKeyID int64
+	}
+	localPending := make(map[eventIdentity]struct{})
+	rememberPending := func(cmd *service.UsageBillingCommand) {
+		localPending[eventIdentity{cmd.RequestID, cmd.APIKeyID}] = struct{}{}
+	}
+	// Monetary replay may wait on a remote hot row. Keep half of this cycle for
+	// independent authority reads; deferring durable evidence is not a commit.
+	budget := 5 * time.Second
+	if deadline, ok := ctx.Deadline(); ok {
+		budget = min(budget, max(time.Duration(0), time.Until(deadline)/2))
+	}
+	replayCtx, cancelReplay := context.WithTimeout(ctx, budget)
+	defer cancelReplay()
+	deferred := make(map[eventIdentity]string)
+	replay := func(cmd *service.UsageBillingCommand) error {
+		if cmd.ClusterID != r.journal.clusterID || cmd.NodeID != r.journal.nodeID {
+			return fmt.Errorf("cluster settlement journal not provisioned for this node")
+		}
+		evidence, err := settlementEvidence(cmd)
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(evidence)
+		if err != nil || len(encoded) > 64*1024-24 {
+			return fmt.Errorf("invalid bounded settlement evidence")
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		identity := eventIdentity{cmd.RequestID, cmd.APIKeyID}
+		if prior, ok := deferred[identity]; ok && prior != cmd.RequestFingerprint {
+			return service.ErrUsageBillingRequestConflict
+		}
+		if replayCtx.Err() == nil {
+			// Recovery confirmation shares the replay deadline; ordinary requests
+			// still retain their detached post-commit authority check.
+			_, err = r.applyClusterSettlementWithConfirmation(replayCtx, replayCtx, cmd)
+			if err == nil || errors.Is(err, service.ErrUsageBillingRequestConflict) {
+				return err
+			}
+			if replayCtx.Err() == nil || (!errors.Is(err, ErrClusterSettlementPending) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled)) {
+				return err
+			}
+		}
+		deferred[identity] = cmd.RequestFingerprint
+		return ErrClusterSettlementPending
+	}
 	for id, data := range reserved {
+		replayPending := false
 		var envelope cluster.RecoveryEvents
 		if len(data) > 0 {
 			if json.Unmarshal(data, &envelope) != nil || envelope.Version != 1 {
 				return 1, fmt.Errorf("invalid reserved settlement envelope")
+			}
+			if envelope.FinishState != "" && !validRecoveryCompletionState(envelope.FinishState) {
+				return pending + 1, fmt.Errorf("invalid execution completion state")
 			}
 			for event, record := range envelope.Events {
 				var command service.UsageBillingCommand
 				if json.Unmarshal(record, &command) != nil || command.ExecutionID != id || command.RequestID != event {
 					return 1, fmt.Errorf("recovery slot identity mismatch")
 				}
-				if _, err := r.applyClusterSettlement(ctx, &command); err != nil {
-					return 1, err
+				if err := replay(&command); err != nil {
+					if !errors.Is(err, ErrClusterSettlementPending) {
+						return pending + 1, err
+					}
+					// Durable evidence remains replayable; count the obligation without
+					// turning an unconfirmed commit into a whole-node health failure.
+					pending++
+					rememberPending(&command)
+					replayPending = true
 				}
 			}
 		}
+		// A completion marker cannot release a slot while any of its money
+		// commands still lacks authoritative confirmation.
+		if replayPending {
+			continue
+		}
+		reservedIDs = append(reservedIDs, id)
 		if envelope.FinishState != "" {
-			if err := cluster.ApplyExecutionCompletion(ctx, r.db, id, r.journal.clusterID, r.journal.nodeID, envelope.FinishState); err != nil {
-				return 1, err
-			}
+			completions[id] = envelope.FinishState
 		}
-		var state string
-		err := r.db.QueryRowContext(ctx, `SELECT state FROM cluster_executions WHERE execution_id=$1 AND cluster_id=$2 AND node_id=$3`, id, r.journal.clusterID, r.journal.nodeID).Scan(&state)
-		if err == nil && (state == "settled" || state == "rejected") {
-			// The events above were replayed into the ledger, so the slot may be released.
-			// Confirm would refuse it by design; this is the replay path's own exit.
-			_ = r.journal.reserve.ReleaseAfterReplay(id)
-		}
+	}
+	if err := r.finishRecoveredExecutions(ctx, completions, reservedIDs); err != nil {
+		return 1, err
 	}
 	entries, err := os.ReadDir(r.journal.dir)
 	if err != nil {
 		return 0, err
 	}
-	pending := 0
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -304,7 +386,11 @@ func (r *usageBillingRepository) RecoverClusterSettlements(ctx context.Context) 
 		if filepath.Base(r.journal.file(&cmd)) != entry.Name() {
 			return pending, fmt.Errorf("settlement record identity mismatch")
 		}
-		if _, err = r.applyClusterSettlement(ctx, &cmd); err != nil {
+		if err = replay(&cmd); err != nil {
+			if errors.Is(err, ErrClusterSettlementPending) {
+				rememberPending(&cmd)
+				continue
+			}
 			return pending, err
 		}
 		pending--
@@ -332,8 +418,11 @@ func (r *usageBillingRepository) RecoverClusterSettlements(ctx context.Context) 
 		if json.Unmarshal(data, &cmd) != nil {
 			return pending + 1, fmt.Errorf("invalid persisted settlement")
 		}
-		if _, err = r.applyClusterSettlement(ctx, &cmd); err != nil {
-			return pending + 1, err
+		if err = replay(&cmd); err != nil {
+			if !errors.Is(err, ErrClusterSettlementPending) {
+				return pending + 1, err
+			}
+			rememberPending(&cmd)
 		}
 	}
 	// Reconcile before counting: admission is closed by the unsettled count, so stale
@@ -343,9 +432,107 @@ func (r *usageBillingRepository) RecoverClusterSettlements(ctx context.Context) 
 		return pending + 1, err
 	}
 	_ = reconciled
+	if len(deferred) > 0 {
+		ids := make([]string, 0, len(deferred))
+		keys := make([]int64, 0, len(deferred))
+		fingerprints := make([]string, 0, len(deferred))
+		for identity, fingerprint := range deferred {
+			ids = append(ids, identity.eventID)
+			keys = append(keys, identity.apiKeyID)
+			fingerprints = append(fingerprints, fingerprint)
+		}
+		// A budget deferral must not hide a conflicting authority identity.
+		var conflict bool
+		err := r.db.QueryRowContext(ctx, `WITH deferred(event_id,api_key_id,fingerprint) AS (
+			SELECT * FROM unnest($2::text[],$3::bigint[],$4::text[])
+		) SELECT EXISTS(SELECT 1 FROM deferred d JOIN cluster_settlement_events e
+			ON e.event_id=d.event_id AND e.api_key_id=d.api_key_id
+			WHERE e.cluster_id<>$1 OR e.request_fingerprint<>d.fingerprint)`,
+			r.journal.clusterID, pq.Array(ids), pq.Array(keys), pq.Array(fingerprints)).Scan(&conflict)
+		if err != nil {
+			return pending + 1, err
+		}
+		if conflict {
+			return pending + 1, service.ErrUsageBillingRequestConflict
+		}
+	}
+	eventIDs := make([]string, 0, len(localPending))
+	apiKeyIDs := make([]int64, 0, len(localPending))
+	for identity := range localPending {
+		eventIDs = append(eventIDs, identity.eventID)
+		apiKeyIDs = append(apiKeyIDs, identity.apiKeyID)
+	}
 	var count int
-	err = r.db.QueryRowContext(ctx, `SELECT count(*) FROM cluster_settlement_events WHERE cluster_id=$1 AND node_id=$2 AND state<>'committed'`, r.journal.clusterID, r.journal.nodeID).Scan(&count)
-	return pending + count, err
+	err = r.db.QueryRowContext(ctx, clusterPendingRecoveryCountSQL, r.journal.clusterID, r.journal.nodeID, pq.Array(eventIDs), pq.Array(apiKeyIDs)).Scan(&count)
+	return count, err
+}
+
+func validRecoveryCompletionState(state string) bool {
+	return state == "rejected" || state == "needs_review" || state == "awaiting_settlement"
+}
+
+// finishRecoveredExecutions replays only known completion markers, then releases
+// slots already terminal in the authority. Its query count is independent of slot count.
+func (r *usageBillingRepository) finishRecoveredExecutions(ctx context.Context, completions map[string]string, reservedIDs []string) error {
+	if len(completions) > 0 {
+		ids := make([]string, 0, len(completions))
+		states := make([]string, 0, len(completions))
+		for id, state := range completions {
+			if !validRecoveryCompletionState(state) {
+				return fmt.Errorf("invalid execution completion state")
+			}
+			ids = append(ids, id)
+			states = append(states, state)
+		}
+		result, err := r.db.ExecContext(ctx, `
+			UPDATE cluster_executions x SET work_finished=TRUE,
+			state=CASE WHEN x.state IN ('settled','rejected') THEN x.state
+				WHEN c.finish_state='rejected' THEN 'rejected'
+				WHEN EXISTS(SELECT 1 FROM cluster_settlement_events e WHERE e.execution_id=x.execution_id)
+					AND NOT EXISTS(SELECT 1 FROM cluster_settlement_events e WHERE e.execution_id=x.execution_id AND e.state<>'committed') THEN 'settled'
+				ELSE c.finish_state END, updated_at=NOW()
+			FROM unnest($1::uuid[],$2::text[]) AS c(execution_id,finish_state)
+			WHERE x.execution_id=c.execution_id AND x.cluster_id=$3 AND x.node_id=$4`, pq.Array(ids), pq.Array(states), r.journal.clusterID, r.journal.nodeID)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != int64(len(completions)) {
+			return fmt.Errorf("execution completion identity not found")
+		}
+	}
+	if len(reservedIDs) == 0 {
+		return nil
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT execution_id::text FROM cluster_executions
+		WHERE cluster_id=$1 AND node_id=$2 AND execution_id=ANY($3::uuid[])
+			AND state IN ('settled','rejected')`, r.journal.clusterID, r.journal.nodeID, pq.Array(reservedIDs))
+	if err != nil {
+		return err
+	}
+	var terminal []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		terminal = append(terminal, id)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, id := range terminal {
+		if err := r.journal.reserve.ReleaseAfterReplay(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 const (
@@ -368,18 +555,57 @@ func (r *usageBillingRepository) reconcileStaleExecutions(ctx context.Context, p
 	if r.journal == nil || limit <= 0 {
 		return 0, nil
 	}
+	// A completion-only envelope proves that work ended; it is not an unreplayed
+	// money command. Monetary evidence still excludes an execution from this pass.
+	monetaryIDs := make([]string, 0, len(pendingEvidence))
+	for id, data := range pendingEvidence {
+		if len(data) == 0 {
+			continue
+		}
+		var envelope cluster.RecoveryEvents
+		if json.Unmarshal(data, &envelope) != nil || envelope.Version != 1 {
+			return 0, fmt.Errorf("invalid reserved settlement envelope")
+		}
+		if len(envelope.Events) > 0 {
+			monetaryIDs = append(monetaryIDs, id)
+		}
+	}
+	// Decide the bounded batch in one database round trip. Per-execution queries
+	// exhaust the recovery deadline over a cross-region database connection.
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT execution_id::text
-		FROM cluster_executions
-		WHERE cluster_id=$1 AND node_id=$2
-			AND state IN ('needs_review','awaiting_settlement')
-			AND work_finished
-			AND created_at < NOW() - make_interval(secs => $3)
-			AND NOT EXISTS(
-				SELECT 1 FROM cluster_settlement_events e
-				WHERE e.execution_id=cluster_executions.execution_id AND e.state<>'committed')
-		ORDER BY created_at
-		LIMIT $4`, r.journal.clusterID, r.journal.nodeID, int(grace.Seconds()), limit)
+		WITH candidates AS (
+			SELECT execution_id
+			FROM cluster_executions
+			WHERE cluster_id=$1 AND node_id=$2
+				AND state IN ('needs_review','awaiting_settlement')
+				AND work_finished
+				AND created_at < NOW() - make_interval(secs => $3)
+				AND NOT (execution_id = ANY($5::uuid[]))
+				AND NOT EXISTS (
+					SELECT 1 FROM cluster_settlement_events e
+					WHERE e.execution_id=cluster_executions.execution_id AND e.state<>'committed')
+			ORDER BY created_at
+			LIMIT $4
+			FOR UPDATE
+		)
+		UPDATE cluster_executions x
+		SET state=CASE WHEN EXISTS (
+			SELECT 1 FROM cluster_settlement_events e
+			JOIN billing_usage_entries b
+				ON b.settlement_event_id=e.event_id AND b.api_key_id=e.api_key_id
+			WHERE e.execution_id=x.execution_id AND e.state='committed'
+				AND (b.applied OR b.delta_usd<>0)
+			UNION ALL
+			SELECT 1 FROM usage_logs l
+			JOIN billing_usage_entries b ON b.usage_log_id=l.id
+			WHERE l.request_id='execution:'||x.execution_id::text AND (b.applied OR b.delta_usd<>0)
+		) THEN 'settled' ELSE 'rejected' END,
+		work_finished=TRUE, updated_at=NOW()
+		FROM candidates c
+		WHERE x.execution_id=c.execution_id
+			AND x.cluster_id=$1 AND x.node_id=$2
+			AND x.state IN ('needs_review','awaiting_settlement')
+		RETURNING x.execution_id::text`, r.journal.clusterID, r.journal.nodeID, int(grace.Seconds()), limit, pq.Array(monetaryIDs))
 	if err != nil {
 		return 0, err
 	}
@@ -399,48 +625,9 @@ func (r *usageBillingRepository) reconcileStaleExecutions(ctx context.Context, p
 	}
 	resolved := 0
 	for _, id := range candidates {
-		if len(pendingEvidence[id]) > 0 {
-			continue
-		}
-		var booked bool
-		// Money evidence is matched through the settlement event's execution linkage, not
-		// through usage_logs.request_id: forced event ids (devin:, web_search:, grok-video:,
-		// grok_audio:, grok_realtime:) deliberately take priority over the execution id, so a
-		// request_id comparison would miss their ledger rows and mislabel paid work as rejected.
-		// The event row and the ledger row are written by the same transaction, and
-		// usage_log_id is cleared to NULL when request detail is retained away, so the
-		// linkage is resolved from either side.
-		if err = r.db.QueryRowContext(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM cluster_settlement_events e
-				JOIN billing_usage_entries b
-					ON b.settlement_event_id = e.event_id AND b.api_key_id = e.api_key_id
-				WHERE e.execution_id = $1::uuid AND e.state = 'committed'
-				  AND (b.applied OR b.delta_usd <> 0)
-				UNION ALL
-				SELECT 1 FROM usage_logs l
-				JOIN billing_usage_entries b ON b.usage_log_id = l.id
-				WHERE l.request_id = 'execution:'||$1 AND (b.applied OR b.delta_usd <> 0))`, id).Scan(&booked); err != nil {
+		if err := r.journal.reserve.ReleaseAfterReplay(id); err != nil {
 			return resolved, err
 		}
-		state := "rejected"
-		if booked {
-			state = "settled"
-		}
-		result, err := r.db.ExecContext(ctx, `
-			UPDATE cluster_executions
-			SET state=$3, work_finished=TRUE, updated_at=NOW()
-			WHERE execution_id=$1 AND cluster_id=$2 AND node_id=$4
-				AND state IN ('needs_review','awaiting_settlement')`, id, r.journal.clusterID, state, r.journal.nodeID)
-		if err != nil {
-			return resolved, err
-		}
-		if affected, err := result.RowsAffected(); err == nil && affected == 0 {
-			continue
-		}
-		// The slot is empty by construction here; a slot holding monetary evidence was
-		// skipped above and stays for the replay loop.
-		_ = r.journal.reserve.ReleaseAfterReplay(id)
 		resolved++
 	}
 	return resolved, nil

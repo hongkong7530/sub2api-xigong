@@ -272,7 +272,7 @@ func (s *ChannelMonitorService) repairIncompleteAutoMonitor(ctx context.Context,
 	if err != nil {
 		return false, err
 	}
-	if m.Description != autoGroupMonitorDescription || m.ProvisionedAPIKeyID != nil {
+	if m.Description != autoGroupMonitorDescription || m.ProvisionedAPIKeyID != nil || m.ProbeMode == MonitorProbeModePassive {
 		return false, nil
 	}
 	if m.APIKey != "" {
@@ -369,6 +369,9 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		return nil, err
 	}
 	checkMode := defaultCheckMode(p.CheckMode)
+	if err := validateMonitorProbeMode(p.ProbeMode, p.GroupID, checkMode); err != nil {
+		return nil, err
+	}
 	// 分组绑定 + auto 供给：api_key 由服务端配给，调用方不传明文。
 	keyProvisionMode := defaultKeyProvisionMode(p.KeyProvisionMode)
 	groupID := cloneInt64Pointer(p.GroupID)
@@ -397,6 +400,7 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		Description:      normalizeMonitorDescription(p.Description),
 		DescriptionColor: normalizeMonitorDescriptionColor(p.DescriptionColor),
 		Enabled:          p.Enabled,
+		ProbeMode:        DefaultMonitorProbeMode(p.ProbeMode),
 		IntervalSeconds:  p.IntervalSeconds,
 		JitterSeconds:    p.JitterSeconds,
 		CreatedBy:        p.CreatedBy,
@@ -411,7 +415,7 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 	if err := s.repo.Create(ctx, m); err != nil {
 		return nil, fmt.Errorf("create channel monitor: %w", err)
 	}
-	if keyProvisionMode == "auto" {
+	if keyProvisionMode == "auto" && m.ProbeMode != MonitorProbeModePassive {
 		// 配给失败必须回滚整条监控：留下没有 Key 的 monitor 会让 runner 反复失败。
 		if err := s.ensureProvisionedMonitorKey(ctx, m); err != nil {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -479,6 +483,7 @@ func (s *ChannelMonitorService) Duplicate(
 		ExtraModels:          append([]string{}, source.ExtraModels...),
 		GroupName:            source.GroupName,
 		Enabled:              false,
+		ProbeMode:            MonitorProbeModeHybrid,
 		IntervalSeconds:      source.IntervalSeconds,
 		JitterSeconds:        source.JitterSeconds,
 		CreatedBy:            createdBy,
@@ -613,6 +618,9 @@ func validateCreateParams(p ChannelMonitorCreateParams) error {
 		return err
 	}
 	keyMode := defaultKeyProvisionMode(p.KeyProvisionMode)
+	if err := validateMonitorProbeMode(p.ProbeMode, p.GroupID, defaultCheckMode(p.CheckMode)); err != nil {
+		return err
+	}
 	if keyMode == "auto" && (p.GroupID == nil || *p.GroupID <= 0) {
 		return ErrChannelMonitorGroupRequired
 	}
@@ -691,7 +699,26 @@ func (s *ChannelMonitorService) Update(ctx context.Context, id int64, p ChannelM
 	if err != nil {
 		return nil, err
 	}
-	if existing.KeyProvisionMode == "auto" {
+	// Newly passive monitors have no probe model or credential until active checks are enabled.
+	if existing.KeyProvisionMode == "auto" && existing.ProbeMode != MonitorProbeModePassive && existing.PrimaryModel == "passive" {
+		models, err := s.GroupModels(ctx, *existing.GroupID)
+		if err != nil {
+			return nil, err
+		}
+		models = automationGroupModels(nil, models)
+		chosen := ""
+		for _, model := range models {
+			if probeableMonitorModel(model) {
+				chosen = model
+				break
+			}
+		}
+		if chosen == "" {
+			return nil, ErrChannelMonitorMissingPrimaryModel
+		}
+		existing.PrimaryModel = chosen
+	}
+	if existing.KeyProvisionMode == "auto" && existing.ProbeMode != MonitorProbeModePassive {
 		if existing.GroupID == nil || *existing.GroupID <= 0 {
 			return nil, ErrChannelMonitorGroupRequired
 		}
@@ -775,7 +802,7 @@ func validateMonitorModeFields(m *ChannelMonitor) error {
 // 存量密文解密为空串（quota 监控切回探活但未重填 key）时拒绝。
 // 密文损坏的情况交给既有 APIKeyDecryptFailed 链路（Get/RunCheck 会显式报错）。
 func (s *ChannelMonitorService) validateProbeAPIKey(m *ChannelMonitor, newPlainKey string) error {
-	if defaultCheckMode(m.CheckMode) == MonitorCheckModeQuota {
+	if defaultCheckMode(m.CheckMode) == MonitorCheckModeQuota || m.ProbeMode == MonitorProbeModePassive {
 		return nil
 	}
 	if strings.TrimSpace(newPlainKey) != "" {
@@ -910,6 +937,9 @@ func (s *ChannelMonitorService) runCheck(ctx context.Context, id int64) ([]*Chec
 	m, err := s.Get(ctx, id) // 已解密 APIKey
 	if err != nil {
 		return nil, err
+	}
+	if m.ProbeMode == MonitorProbeModePassive {
+		return nil, ErrChannelMonitorPassive
 	}
 	// 既有 auto 监控也应用同一策略，不只在 Create/Update 时生效。
 	s.applyAutomaticProbePolicy(ctx, m)
@@ -1456,6 +1486,12 @@ func applyMonitorUpdate(existing *ChannelMonitor, p ChannelMonitorUpdateParams) 
 	}
 	if existing.KeyProvisionMode == "auto" && (existing.GroupID == nil || *existing.GroupID <= 0) {
 		return ErrChannelMonitorGroupRequired
+	}
+	if p.ProbeMode != nil {
+		existing.ProbeMode = DefaultMonitorProbeMode(*p.ProbeMode)
+	}
+	if err := validateMonitorProbeMode(existing.ProbeMode, existing.GroupID, defaultCheckMode(existing.CheckMode)); err != nil {
+		return err
 	}
 	if p.Description != nil {
 		existing.Description = normalizeMonitorDescription(*p.Description)

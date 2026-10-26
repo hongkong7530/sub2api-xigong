@@ -32,7 +32,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	body []byte,
 	promptCacheKey string,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (rateResult *OpenAIForwardResult, rateErr error) {
+	defer func() { finishOpenAIRateObservation(observationContext(c, ctx), rateResult, rateErr) }()
 	// 破甲注入：入站为 Anthropic 形态，按 messages 协议注入（仅开启破甲的 Key 生效）。
 	body = injectJailbreakForRequest(c, account, body, true)
 
@@ -167,8 +168,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	responsesReq.Stream = true
 	isStream := true
 
-	// 3b. Handle BetaFastMode → service_tier: "priority"
-	if containsBetaToken(c.GetHeader("anthropic-beta"), claude.BetaFastMode) {
+	// 显式 OpenAI 档位优先于兼容 Fast 提示；缺省时保留原有 BetaFastMode 行为。
+	responsesReq.ServiceTier = s.openAICompatMessagesServiceTier(ctx, account, upstreamModel, body)
+	if responsesReq.ServiceTier == "" && containsBetaToken(c.GetHeader("anthropic-beta"), claude.BetaFastMode) {
 		responsesReq.ServiceTier = "priority"
 	}
 
@@ -541,15 +543,15 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		if promptCacheKey != "" && anthropicDigestChain != "" {
 			s.bindOpenAICompatAnthropicDigestPromptCacheKey(account, apiKeyID, anthropicDigestChain, promptCacheKey, anthropicMatchedDigestChain)
 		}
-		// 计费 tier 优先采用上游回显值；上游未回显时回退到最终出站 body（经过
-		// fast policy filter/force 之后）里的 tier。
-		if tier := resolvedOpenAIUpstreamServiceTier(c, extractOpenAIServiceTierFromBody(responsesBody)); tier != nil {
-			result.ServiceTier = tier
-		}
 		if responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
 			re := responsesReq.Reasoning.Effort
 			result.ReasoningEffort = &re
 		}
+	}
+
+	// 已计量但异常结束的流也会结算，必须保留最终出站档位；上游降档由计费层统一处理。
+	if result != nil {
+		result.ServiceTier = resolvedOpenAIUpstreamServiceTier(c, extractOpenAIServiceTierFromBody(responsesBody))
 	}
 
 	// Extract and save Codex usage snapshot from response headers (for OAuth accounts).
@@ -691,6 +693,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 		UpstreamModel:                 upstreamModel,
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		OutputDurationMs:              observedStreamOutputDuration(c),
+		RateObservation:               observedStreamRateObservation(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
 		Stream:                        false,
@@ -829,6 +832,9 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 	type scanEvent struct {
 		line string
 		err  error
+	}
+	if o := upstreamResponseModelObserverFromContext(c); o != nil {
+		o.outputWindow.arrivals.MarkTimingUncertain()
 	}
 	events := make(chan scanEvent, 16)
 	done := make(chan struct{})
@@ -999,6 +1005,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			UpstreamModel:                 upstreamModel,
 			UpstreamResponseModel:         observedUpstreamResponseModel(c),
 			OutputDurationMs:              observedStreamOutputDuration(c),
+			RateObservation:               observedStreamRateObservation(c),
 			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 			UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
 			Stream:                        true,
@@ -1246,6 +1253,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	type scanEvent struct {
 		line string
 		err  error
+	}
+	if o := upstreamResponseModelObserverFromContext(c); o != nil {
+		o.outputWindow.arrivals.MarkTimingUncertain()
 	}
 	events := make(chan scanEvent, 16)
 	done := make(chan struct{})

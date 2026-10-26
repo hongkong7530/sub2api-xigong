@@ -144,6 +144,11 @@ export default defineConfig(({ mode }) => {
               return 'vendor-stripe'
             }
 
+            // 支付 SDK 导入时有网络副作用，不得并入首页共享依赖。
+            if (id.includes('/@airwallex/components-sdk/')) {
+              return 'vendor-airwallex'
+            }
+
             // 其他小型第三方库合并
             return 'vendor-misc'
           }

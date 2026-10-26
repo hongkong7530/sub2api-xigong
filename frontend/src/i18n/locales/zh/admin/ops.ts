@@ -4,7 +4,7 @@ export default {
       description: '运维监控与排障',
       // Dashboard
       systemHealth: '系统健康',
-      outputTps: '单次输出 TPS',
+      outputTps: '观测输出速率',
       outputTpsSamples: '有效样本：{count}',
       overview: '概览',
       noSystemMetrics: '尚未收集系统指标。',
@@ -807,7 +807,7 @@ export default {
         accountError: '异常'
       },
       tooltips: {
-        outputTps: '每条有效用量记录的输出 Token ÷ 总耗时（含首字等待），再按当前时间、平台和分组计算分位数。输出可含推理 Token，不重复相加。P50 为中位数，P5/P10 反映较慢请求；数值越高越快。排除图片、Live、无有效输出或耗时的记录。样本来自仍保留的使用明细；无样本或统计暂不可用时显示 —。',
+        outputTps: '仅到达分布充分的新用量记录：输出Token÷独立流事件窗口，再按当前时间、平台和分组计算分位数；短窗口、集中/单批返回、旧记录和不完整观测排除。不是模型内部生成TPS，也不是含等待平均吞吐。输出可含推理 Token，不重复相加。P50 为中位数，P5/P10 反映较慢请求；数值越高越快。排除图片、Live、无有效输出或耗时的记录。样本来自仍保留的使用明细；无样本或统计暂不可用时显示 —。',
         totalRequests: '当前时间窗口内的总请求数和Token消耗量。',
         throughputTrend: '当前窗口内的请求/QPS 与 token/TPS 趋势。',
         switchRateTrend: '近5小时内账号切换次数 / 请求总数的趋势（平均切换次数）。',

@@ -350,8 +350,20 @@ func (s *BillingCacheService) GetUserBalance(ctx context.Context, userID int64) 
 	return balance, nil
 }
 
-// getUserBalanceFromDB 从数据库获取用户余额
+// userBalanceReader 是权威余额的轻量读取能力；旧仓储仍可沿用完整用户读取。
+type userBalanceReader interface {
+	GetBalance(ctx context.Context, userID int64) (float64, error)
+}
+
+// getUserBalanceFromDB 从数据库获取用户余额。
 func (s *BillingCacheService) getUserBalanceFromDB(ctx context.Context, userID int64) (float64, error) {
+	if reader, ok := s.userRepo.(userBalanceReader); ok {
+		balance, err := reader.GetBalance(ctx, userID)
+		if err != nil {
+			return 0, fmt.Errorf("get user balance: %w", err)
+		}
+		return balance, nil
+	}
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return 0, fmt.Errorf("get user balance: %w", err)

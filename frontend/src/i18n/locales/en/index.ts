@@ -1,4 +1,5 @@
 import landing from './landing'
+import profit from './profit'
 import experience from './experience'
 import common from './common'
 import dashboard from './dashboard'
@@ -10,6 +11,7 @@ import misc from './misc'
 
 export default {
   ...landing,
+  ...profit,
   ...experience,
   ...common,
   ...dashboard,

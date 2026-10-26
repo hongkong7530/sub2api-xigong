@@ -28,25 +28,7 @@
             <strong class="font-black tabular-nums">{{ detail.group_insight.cache_hit_rate == null ? '—' : `${detail.group_insight.cache_hit_rate.toFixed(1)}%` }}</strong>
           </span>
         </div>
-        <div v-if="detail.group_insight.rate_history?.length" class="mt-3">
-          <div class="mb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{{ t('monitorCommon.groupRateTrend') }}</div>
-          <svg
-            class="h-16 w-full"
-            viewBox="0 0 320 64"
-            preserveAspectRatio="none"
-            role="img"
-            :aria-label="t('monitorCommon.groupRateTrend')"
-          >
-            <polyline
-              :points="ratePolyline(detail.group_insight.rate_history)"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              class="text-primary-500"
-            />
-          </svg>
-        </div>
-        <div v-else class="mt-2 text-xs text-gray-400 dark:text-dark-500">{{ t('monitorCommon.groupRateTrendEmpty') }}</div>
+        <MonitorRateHistory :history="detail.group_insight.rate_history ?? []" :current-rate="detail.group_insight.rate_multiplier" />
       </div>
 
       <MonitorFirstTokenSamples v-if="detail.group_insight" :samples="detail.group_insight.recent_first_tokens ?? []" detailed />
@@ -113,6 +95,7 @@ import {
 } from '@/api/channelMonitor'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import MonitorFirstTokenSamples from './monitor/MonitorFirstTokenSamples.vue'
+import MonitorRateHistory from './monitor/MonitorRateHistory.vue'
 import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
@@ -132,22 +115,6 @@ function formatRate(value: number): string {
   return Number.isFinite(value) ? value.toFixed(4) : '—'
 }
 
-/** 把倍率变更历史映射为 SVG 折线点（viewBox 320x64，按最小值/最大值归一）。 */
-function ratePolyline(points: Array<{ effective_rate_multiplier: number }>): string {
-  const values = points.map((p) => p.effective_rate_multiplier).filter((v) => Number.isFinite(v))
-  if (values.length === 0) return ''
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = max - min || 1
-  const step = values.length > 1 ? 320 / (values.length - 1) : 0
-  return values
-    .map((v, i) => {
-      const x = (i * step).toFixed(1)
-      const y = (64 - ((v - min) / span) * 56 - 4).toFixed(1)
-      return `${x},${y}`
-    })
-    .join(' ')
-}
 
 const appStore = useAppStore()
 const { statusLabel, statusBadgeClass, formatLatency, formatPercent, formatMonitorModel } = useChannelMonitorFormat()

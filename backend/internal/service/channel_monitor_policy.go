@@ -13,7 +13,6 @@ func (s *ChannelMonitorService) applyAutomaticProbePolicy(ctx context.Context, m
 	if m == nil || m.GroupID == nil || m.KeyProvisionMode != "auto" || defaultCheckMode(m.CheckMode) == MonitorCheckModeQuota {
 		return
 	}
-	m.IntervalSeconds = autoMonitorIntervalSeconds
 	m.JitterSeconds = autoMonitorJitterSeconds
 	m.ExtraModels = []string{}
 	if endpoint := s.probeRuntime(ctx).ProbeEndpoint; endpoint != "" {
@@ -22,15 +21,40 @@ func (s *ChannelMonitorService) applyAutomaticProbePolicy(ctx context.Context, m
 }
 
 func applyAutoMonitorModels(m *ChannelMonitor, models []string) {
-	if m == nil || len(models) == 0 { return }
+	if m == nil || len(models) == 0 {
+		return
+	}
 	available := make(map[string]string, len(models))
-	for _, model := range models { model = strings.TrimSpace(model); if model != "" { available[strings.ToLower(model)] = model } }
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model != "" {
+			available[strings.ToLower(model)] = model
+		}
+	}
 	primary := strings.ToLower(strings.TrimSpace(m.PrimaryModel))
-	if _, ok := available[primary]; !ok { for _, model := range models { if probeableMonitorModel(model) { m.PrimaryModel = strings.TrimSpace(model); break } } }
+	if _, ok := available[primary]; !ok {
+		for _, model := range models {
+			if probeableMonitorModel(model) {
+				m.PrimaryModel = strings.TrimSpace(model)
+				break
+			}
+		}
+	}
 	seen := map[string]struct{}{strings.ToLower(strings.TrimSpace(m.PrimaryModel)): {}}
 	extras := make([]string, 0)
-	for _, model := range models { model = strings.TrimSpace(model); key:=strings.ToLower(model); if model=="" || !probeableMonitorModel(model) {continue}; if _,ok:=seen[key];ok{continue}; seen[key]=struct{}{}; extras=append(extras,model) }
-	m.ExtraModels=extras
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		key := strings.ToLower(model)
+		if model == "" || !probeableMonitorModel(model) {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		extras = append(extras, model)
+	}
+	m.ExtraModels = extras
 }
 
 func probeableMonitorModel(model string) bool {
@@ -53,7 +77,7 @@ func (s *ChannelMonitorService) ScheduledCheckDue(ctx context.Context, id int64)
 	if err != nil {
 		return false, err
 	}
-	if !m.Enabled {
+	if !m.Enabled || m.ProbeMode == MonitorProbeModePassive {
 		return false, nil
 	}
 	now := time.Now().UTC()
@@ -66,7 +90,6 @@ func (s *ChannelMonitorService) ScheduledCheckDue(ctx context.Context, id int64)
 		if observations[*m.GroupID] != nil {
 			return false, nil
 		}
-		interval = monitorRealRequestWindow
 	}
 	if interval <= 0 {
 		return false, nil

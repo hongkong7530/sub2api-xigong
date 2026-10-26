@@ -94,6 +94,8 @@ function actionLabel(action: string): string {
   switch (action) {
     case 'monitor_created':
       return t('admin.channelMonitor.autoProvision.actionMonitorCreated')
+    case 'monitor_updated':
+      return t('admin.channelMonitor.autoProvision.actionMonitorUpdated')
     case 'monitor_repaired':
       return t('admin.channelMonitor.autoProvision.actionMonitorRepaired')
     case 'monitor_skipped':

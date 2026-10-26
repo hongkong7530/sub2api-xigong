@@ -19,6 +19,7 @@ export type Provider =
 
 export type MonitorStatus = 'operational' | 'degraded' | 'failed' | 'error'
 export type BodyOverrideMode = 'off' | 'merge' | 'replace'
+export type ProbeMode = 'hybrid' | 'passive'
 export type APIMode = 'chat_completions' | 'responses'
 /**
  * probe = LLM 探活（默认）；quota = 仅查关联账号用量（零 LLM 成本）；
@@ -77,6 +78,7 @@ export interface ChannelMonitor {
   extra_models: string[]
   group_name: string
   enabled: boolean
+  probe_mode?: ProbeMode
   interval_seconds: number
   /** 每次调度在 interval 基础上 ± [0, jitter] 的随机偏移（秒），0 = 固定间隔 */
   jitter_seconds: number
@@ -143,6 +145,7 @@ export interface GroupMonitorMetrics {
 }
 
 export interface GroupRateHistoryItem {
+  is_initial?: boolean
   rate_multiplier: number
   effective_rate_multiplier: number
   peak_rate_enabled: boolean
@@ -199,6 +202,7 @@ export interface CreateParams {
   description?: string
   description_color?: string
   enabled?: boolean
+  probe_mode?: ProbeMode
   interval_seconds: number
   jitter_seconds?: number
   template_id?: number | null
@@ -437,10 +441,11 @@ export interface GroupAutomationReport {
   items: GroupAutomationItem[]
 }
 
-export async function autoProvisionPublicGroups(): Promise<GroupAutomationReport> {
+export interface GroupAutomationSelection { group_id: number; probe_mode: ProbeMode; interval_seconds: number }
+export async function autoProvisionPublicGroups(groups: GroupAutomationSelection[]): Promise<GroupAutomationReport> {
   // A full scan performs model discovery for each public group; keep this
   // operation's budget separate from the normal 30-second API timeout.
-  const { data } = await apiClient.post<GroupAutomationReport>('/admin/channel-monitors/auto-provision', undefined, { timeout: 120000 })
+  const { data } = await apiClient.post<GroupAutomationReport>('/admin/channel-monitors/auto-provision', { groups }, { timeout: 120000 })
   return data
 }
 

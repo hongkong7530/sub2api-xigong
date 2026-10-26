@@ -128,12 +128,12 @@ func (c *ClusterConfig) Validate() error {
 			return fmt.Errorf("unknown cluster capability %q", capability)
 		}
 	}
-	if seen[RoleController] && !c.Shadow {
+	if (seen[RoleController] || seen[RoleIngress]) && !c.Shadow {
 		if !filepath.IsAbs(c.HAProxyConfig) || strings.TrimSpace(c.HAProxyBinary) == "" || !clusterIdentityPattern.MatchString(c.HAProxyService) {
-			return fmt.Errorf("controller requires an absolute HAProxy config and explicit executable/service")
+			return fmt.Errorf("active ingress or controller requires an absolute HAProxy config and explicit executable/service")
 		}
 		if !filepath.IsAbs(c.HAProxyRuntimeSocket) || !clusterIdentityPattern.MatchString(c.ClusterBackendName) {
-			return fmt.Errorf("controller requires an absolute HAProxy runtime socket and valid managed backend")
+			return fmt.Errorf("active ingress or controller requires an absolute HAProxy runtime socket and valid managed backend")
 		}
 	}
 	return nil

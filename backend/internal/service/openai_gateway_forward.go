@@ -18,7 +18,8 @@ import (
 )
 
 // Forward forwards request to OpenAI API
-func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (rateResult *OpenAIForwardResult, rateErr error) {
+	defer func() { finishOpenAIRateObservation(observationContext(c, ctx), rateResult, rateErr) }()
 	// 破甲注入：在协议转换与改写之前，对客户端原始请求体注入（仅开启破甲的 Key 生效）。
 	body = injectJailbreakForRequest(c, account, body, false)
 	beginUpstreamResponseModelObservation(c)
@@ -1330,6 +1331,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			UpstreamModel:                 upstreamModel,
 			UpstreamResponseModel:         observedUpstreamResponseModel(c),
 			OutputDurationMs:              observedStreamOutputDuration(c),
+			RateObservation:               observedStreamRateObservation(c),
 			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 			UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
 			ServiceTier:                   resolvedOpenAIUpstreamServiceTier(c, serviceTier),

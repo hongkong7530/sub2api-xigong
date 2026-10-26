@@ -18,6 +18,8 @@ import { resolveRouteDocumentTitle } from './title'
  * Route definitions with lazy loading
  */
 const routes: RouteRecordRaw[] = [
+  { path: '/profit', name: 'ProfitDisclosure', component: () => import('@/views/user/ProfitDisclosureView.vue'), meta: { requiresAuth: true, titleKey: 'profit.nav' } },
+  { path: '/admin/profit', name: 'ProfitManagement', component: () => import('@/views/admin/ProfitManageView.vue'), meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'profit.adminNav' } },
   { path: '/docs', name: 'Docs', component: () => import('@/views/DocsView.vue'), meta: { requiresAuth: false, titleKey: 'experience.docs' } },
   { path: '/docs/read/:slug', name: 'DocArticle', component: () => import('@/views/DocsView.vue'), meta: { requiresAuth: false, titleKey: 'experience.docs' } },
   { path: '/admin/docs', name: 'AdminDocs', component: () => import('@/views/admin/DocsManageView.vue'), meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'experience.docsAdmin' } },

@@ -34,6 +34,16 @@ func RegisterAdminRoutes(
 		// 部署与运营合规确认
 		registerAdminComplianceRoutes(admin, h)
 
+  bots := admin.Group("/bot/installations")
+  bots.GET("", h.Bot.List)
+  bots.POST("", h.Bot.Create)
+  bots.DELETE("/:id", h.Bot.Revoke)
+
+		profit := admin.Group("/profit")
+ profit.GET("/overview", h.SiteProfit.Overview)
+ profit.GET("/groups", h.SiteProfit.Overview)
+ profit.PUT("/groups/:id/cost", h.SiteProfit.SetCost)
+ profit.GET("/entries", h.SiteProfit.Entries)
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 

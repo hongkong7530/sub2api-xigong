@@ -29,6 +29,7 @@ export interface MonitorTimelinePoint {
 
 /** 分组倍率变更历史单点。 */
 export interface UserGroupRatePoint {
+  is_initial?: boolean
   rate_multiplier: number
   effective_rate_multiplier: number
   recorded_at: string
@@ -86,6 +87,9 @@ export interface UserMonitorView {
   group_insight?: UserGroupInsight | null
 }
 
+export type CacheRateWindowSeconds = 1800 | 3600 | 21600 | 86400
+export const DEFAULT_CACHE_RATE_WINDOW_SECONDS: CacheRateWindowSeconds = 1800
+
 export interface UserMonitorListResponse {
   items: UserMonitorView[]
 }
@@ -128,9 +132,13 @@ export interface MonitorSubscriptionListResponse {
 /**
  * List all monitor views available to the current user.
  */
-export async function list(options?: { signal?: AbortSignal }): Promise<UserMonitorListResponse> {
+export async function list(options?: {
+  signal?: AbortSignal
+  cacheWindowSeconds?: CacheRateWindowSeconds
+}): Promise<UserMonitorListResponse> {
   const { data } = await apiClient.get<UserMonitorListResponse>('/channel-monitors', {
     signal: options?.signal,
+    params: { cache_window_seconds: options?.cacheWindowSeconds ?? DEFAULT_CACHE_RATE_WINDOW_SECONDS },
   })
   return data
 }

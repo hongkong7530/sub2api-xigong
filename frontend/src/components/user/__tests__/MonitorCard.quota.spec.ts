@@ -60,6 +60,19 @@ function mountCard(item: UserMonitorView) {
 }
 
 describe('MonitorCard quota snapshot visibility', () => {
+  it('updates tok/s from each new card value and clears a missing latest observation', async () => {
+    const wrapper = mountCard(makeItem())
+    const pair = wrapper.getComponent({ name: 'MonitorMetricPair' })
+    expect(pair.props('secondaryValue')).toBe('—')
+    await wrapper.setProps({ item: makeItem({ primary_output_tokens_per_second: 198.12 }) })
+    expect(pair.props('secondaryValue')).toBe('198.1')
+    await wrapper.setProps({ item: makeItem({ primary_output_tokens_per_second: 228.72 }) })
+    expect(pair.props('secondaryValue')).toBe('228.7')
+    await wrapper.setProps({ item: makeItem({ primary_output_tokens_per_second: null }) })
+    expect(pair.props('secondaryValue')).toBe('—')
+    wrapper.unmount()
+  })
+
   it('replaces endpoint ping with output speed and keeps missing speed unknown', () => {
     const wrapper = mountCard(makeItem({ primary_output_tokens_per_second: 42.55 }))
     const pair = wrapper.getComponent({ name: 'MonitorMetricPair' })

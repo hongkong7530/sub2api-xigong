@@ -1,0 +1,8 @@
+Artwork: Girl in chibi style by Niabot, Wikimedia Commons.
+Source: https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg
+License: Creative Commons Attribution-ShareAlike 3.0 Unported
+https://creativecommons.org/licenses/by-sa/3.0/
+Changes: hair recoloring, resize, rasterization and WebP compression.
+All derivative images in this directory are offered under CC BY-SA 3.0.
+These are generic themed companions, not official provider characters or endorsements.
+No nine-balance-widget or CrossPet artwork is included in these files.

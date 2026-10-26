@@ -35,7 +35,7 @@ func (s *ChannelMonitorService) latestGroupObservations(ctx context.Context, gro
 }
 
 func isHybridMonitor(m *ChannelMonitor) bool {
-	return m != nil && m.GroupID != nil && defaultKeyProvisionMode(m.KeyProvisionMode) == "auto" && defaultCheckMode(m.CheckMode) != MonitorCheckModeQuota
+	return m != nil && m.GroupID != nil && (defaultKeyProvisionMode(m.KeyProvisionMode) == "auto" || m.ProbeMode == MonitorProbeModePassive) && defaultCheckMode(m.CheckMode) != MonitorCheckModeQuota
 }
 
 func observationCheckResult(o *ChannelMonitorObservation) *CheckResult {

@@ -3,6 +3,8 @@ package cluster
 import (
 	"bufio"
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
 const managedBegin = "# BEGIN SUB2API CLUSTER V3"
@@ -67,6 +70,10 @@ func (p *Proxy) Render(original string, nodes []Node) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\nbackend %s\n    mode http\n    balance leastconn\n    retries 0\n    option httpchk GET /health\n    http-check expect status 200\n", managedBegin, p.backend)
+	// Proxy waiting must share the bounded admission budget, not inherit the long stream timeout.
+	if p.cfg.QueueTimeoutMS > 0 {
+		fmt.Fprintf(&b, "    timeout queue %dms\n", p.cfg.QueueTimeoutMS)
+	}
 	ordered := append([]Node(nil), nodes...)
 	slices.SortFunc(ordered, func(a, b Node) int { return strings.Compare(a.ID, b.ID) })
 	for _, n := range ordered {
@@ -180,9 +187,10 @@ func (p *Proxy) Apply(ctx context.Context, nodes []Node) error {
 }
 
 type ProxyState struct {
-	State  string
-	Weight int
-	Active int
+	State          string
+	Weight         int
+	Active         int
+	MaxConnections int
 }
 
 func (p *Proxy) Command(ctx context.Context, command string) (string, error) {
@@ -238,7 +246,11 @@ func (p *Proxy) States(ctx context.Context) (map[string]ProxyState, error) {
 		if err != nil {
 			return nil, err
 		}
-		states[fields[1]] = ProxyState{State: fields[17], Weight: weight, Active: active}
+		limit, err := strconv.Atoi(fields[6])
+		if err != nil {
+			return nil, err
+		}
+		states[fields[1]] = ProxyState{State: fields[17], Weight: weight, Active: active, MaxConnections: limit}
 	}
 	return states, nil
 }
@@ -266,59 +278,120 @@ func DesiredWeight(node Node, snapshot *Snapshot, now time.Time) int {
 	}
 	return node.BaseWeight
 }
+
+// proxyRevision excludes acknowledgement fields so confirming an operation cannot invalidate itself.
+func proxyRevision(nodes []Node) string {
+	type revision struct {
+		ID       string
+		Revision int64
+	}
+	versions := make([]revision, 0, len(nodes))
+	for _, n := range nodes {
+		versions = append(versions, revision{n.ID, n.Revision})
+	}
+	slices.SortFunc(versions, func(a, b revision) int { return strings.Compare(a.ID, b.ID) })
+	return fingerprint(versions)
+}
+
+func ingressProxiesApplied(nodes []Node, snapshots map[string]*Snapshot, revision string, now time.Time) bool {
+	count := 0
+	for _, n := range nodes {
+		if n.State == "retired" || n.State == "pending" || (!slices.Contains(n.Roles, config.RoleIngress) && !slices.Contains(n.Roles, config.RoleController)) {
+			continue
+		}
+		count++
+		s := snapshots[n.ID]
+		if s == nil || s.NodeID != n.ID || s.BootID == "" || !s.Fresh(now) || s.ObservedRevision != n.Revision || s.Proxy == nil {
+			return false
+		}
+		p := s.Proxy
+		if p.BootID != s.BootID || p.Error != "" || p.Revision != revision || !(Snapshot{At: p.At}).Fresh(now) {
+			return false
+		}
+	}
+	return count > 0
+}
+
+func releaseProxyLock(conn *sql.Conn, key string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var unlocked bool
+	if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock(hashtextextended($1,0))`, key).Scan(&unlocked); err != nil || !unlocked {
+		// Close returns a session to the pool; an uncertain lock requires physical eviction.
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	}
+}
+
+func (r *Runtime) observeProxy(revision, code string) {
+	r.mu.Lock()
+	r.proxyObservation = &ProxyObservation{BootID: r.bootID, At: time.Now().UTC(), Revision: revision, Error: code}
+	r.mu.Unlock()
+}
+
 func (r *Runtime) reconcile(parent context.Context) {
+	if r.proxy == nil || r.cfg.Cluster.Shadow {
+		return
+	}
 	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
 	defer cancel()
 	nodes, err := r.Store.Nodes(ctx)
 	if err != nil {
+		r.observeProxy("", "proxy_registry_read_failed")
 		return
 	}
-	if r.cfg.Cluster.Shadow {
-		return
+	// Preserve the controller lock domain during rolling upgrades; other ingresses own only their host.
+	lockKey := r.cfg.Cluster.ID + ":ingress"
+	if !r.IsController() {
+		lockKey += ":" + r.cfg.Cluster.NodeID
 	}
-	// A session-scoped lock prevents two live controllers from writing the same ingress.
 	conn, err := r.db.Conn(ctx)
 	if err != nil {
+		r.observeProxy("", "proxy_lock_connection_failed")
 		return
 	}
 	defer conn.Close()
 	var locked bool
-	if conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtextextended($1,0))`, r.cfg.Cluster.ID+":ingress").Scan(&locked) != nil || !locked {
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtextextended($1,0))`, lockKey).Scan(&locked); err != nil {
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		r.observeProxy("", "proxy_lock_failed")
 		return
 	}
-	defer func() {
-		unlockCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_, _ = conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock(hashtextextended($1,0))`, r.cfg.Cluster.ID+":ingress")
-	}()
+	if !locked {
+		r.observeProxy("", "proxy_lock_busy")
+		return
+	}
+	defer releaseProxyLock(conn, lockKey)
 	if err = r.proxy.Apply(ctx, nodes); err != nil {
-		r.markApplyError(ctx, "proxy_configuration_failed")
+		r.markApplyError(ctx, conn, "proxy_configuration_failed")
 		return
 	}
 	states, err := r.proxy.States(ctx)
 	if err != nil {
-		r.markApplyError(ctx, "proxy_readback_failed")
+		r.markApplyError(ctx, conn, "proxy_readback_failed")
 		return
 	}
+	wanted := make(map[string]ProxyState)
+	snapshots := make(map[string]*Snapshot)
 	for _, n := range nodes {
+		if n.State == "retired" || !slices.Contains(n.Roles, config.RoleWorker) {
+			continue
+		}
 		actual, present := states[n.ID]
-		if n.State == "retired" {
-			if !present {
-				_, _ = r.db.ExecContext(ctx, `UPDATE cluster_nodes SET applied_revision=$3,applied_at=NOW(),apply_error=NULL WHERE cluster_id=$1 AND node_id=$2 AND revision=$3 AND applied_revision<>$3`, r.cfg.Cluster.ID, n.ID, n.Revision)
-				_, _ = r.db.ExecContext(ctx, `UPDATE cluster_operations SET status='awaiting_revocation',error_code=NULL WHERE cluster_id=$1 AND node_id=$2 AND target_revision=$3 AND status IN ('pending','error')`, r.cfg.Cluster.ID, n.ID, n.Revision)
-			}
-			continue
-		}
-		if !slices.Contains(n.Roles, "worker") {
-			continue
-		}
 		if !present {
-			continue
+			r.markApplyError(ctx, conn, "proxy_member_missing")
+			return
+		}
+		if actual.MaxConnections != n.MaxInFlight {
+			if _, err = r.proxy.Command(ctx, fmt.Sprintf("set maxconn server %s/%s %d", r.proxy.backend, n.ID, n.MaxInFlight)); err != nil {
+				r.markApplyError(ctx, conn, "proxy_capacity_failed")
+				return
+			}
 		}
 		snapshot, snapshotErr := r.Snapshot(ctx, n.ID)
 		if snapshotErr != nil {
 			snapshot = nil
 		}
+		snapshots[n.ID] = snapshot
 		weight := DesiredWeight(n, snapshot, time.Now())
 		target := weight
 		if weight > 0 {
@@ -338,41 +411,92 @@ func (r *Runtime) reconcile(parent context.Context) {
 		if weight == 0 && n.State != "ready" {
 			state = "maint"
 		}
+		commands := []string{fmt.Sprintf("set server %s/%s weight %d", r.proxy.backend, n.ID, target)}
+		stateCommand := fmt.Sprintf("set server %s/%s state %s", r.proxy.backend, n.ID, state)
 		if weight == 0 {
-			if _, err = r.proxy.Command(ctx, fmt.Sprintf("set server %s/%s state %s", r.proxy.backend, n.ID, state)); err != nil {
-				continue
+			commands = append([]string{stateCommand}, commands...)
+		} else {
+			commands = append(commands, stateCommand)
+		}
+		for _, command := range commands {
+			if _, err = r.proxy.Command(ctx, command); err != nil {
+				r.markApplyError(ctx, conn, "proxy_runtime_update_failed")
+				return
 			}
 		}
-		if _, err = r.proxy.Command(ctx, fmt.Sprintf("set server %s/%s weight %d", r.proxy.backend, n.ID, target)); err != nil {
+		wanted[n.ID] = ProxyState{State: state, Weight: target, MaxConnections: n.MaxInFlight}
+	}
+	readback, err := r.proxy.States(ctx)
+	if err != nil {
+		r.markApplyError(ctx, conn, "proxy_readback_failed")
+		return
+	}
+	for _, n := range nodes {
+		got, present := readback[n.ID]
+		if n.State == "retired" {
+			if present {
+				r.markApplyError(ctx, conn, "proxy_retirement_unconfirmed")
+				return
+			}
 			continue
 		}
-		if state == "ready" {
-			if _, err = r.proxy.Command(ctx, fmt.Sprintf("set server %s/%s state ready", r.proxy.backend, n.ID)); err != nil {
+		want, required := wanted[n.ID]
+		if !required {
+			continue
+		}
+		stateOK := (want.State == "ready" && strings.HasPrefix(got.State, "UP")) || (want.State == "drain" && strings.Contains(got.State, "DRAIN")) || (want.State == "maint" && strings.Contains(got.State, "MAINT"))
+		if !present || got.MaxConnections != want.MaxConnections || got.Weight != want.Weight || !stateOK {
+			r.markApplyError(ctx, conn, "proxy_runtime_unconfirmed")
+			return
+		}
+	}
+	revision := proxyRevision(nodes)
+	r.observeProxy(revision, "")
+	r.lastProxyError = ""
+	// Only the controller confirms operations, after every registered serving ingress read back this plan.
+	if !r.IsController() {
+		return
+	}
+	var ingressIDs []string
+	for _, n := range nodes {
+		if slices.Contains(n.Roles, config.RoleIngress) || slices.Contains(n.Roles, config.RoleController) {
+			ingressIDs = append(ingressIDs, n.ID)
+		}
+	}
+	ingressSnapshots, err := r.Snapshots(ctx, ingressIDs)
+	if err != nil || !ingressProxiesApplied(nodes, ingressSnapshots, revision, time.Now()) {
+		return
+	}
+	for _, n := range nodes {
+		if n.State == "retired" {
+			if _, err = conn.ExecContext(ctx, `UPDATE cluster_nodes SET applied_revision=$3,applied_at=NOW(),apply_error=NULL WHERE cluster_id=$1 AND node_id=$2 AND revision=$3 AND applied_revision<>$3`, r.cfg.Cluster.ID, n.ID, n.Revision); err == nil {
+				_, err = conn.ExecContext(ctx, `UPDATE cluster_operations SET status='awaiting_revocation',error_code=NULL WHERE cluster_id=$1 AND node_id=$2 AND target_revision=$3 AND status IN ('pending','error')`, r.cfg.Cluster.ID, n.ID, n.Revision)
+			}
+		} else if slices.Contains(n.Roles, config.RoleWorker) {
+			s := snapshots[n.ID]
+			if s == nil || !s.Fresh(time.Now()) || s.ObservedRevision != n.Revision || (n.State == "ready" && !s.AdmissionReady) {
 				continue
 			}
+			if _, err = conn.ExecContext(ctx, `UPDATE cluster_nodes SET applied_revision=$3,applied_at=NOW(),apply_error=NULL WHERE cluster_id=$1 AND node_id=$2 AND revision=$3 AND applied_revision<>$3`, r.cfg.Cluster.ID, n.ID, n.Revision); err == nil {
+				_, err = conn.ExecContext(ctx, `UPDATE cluster_operations SET status='applied',applied_at=NOW(),error_code=NULL WHERE cluster_id=$1 AND node_id=$2 AND target_revision=$3 AND status IN ('pending','error')`, r.cfg.Cluster.ID, n.ID, n.Revision)
+			}
 		}
-		if n.State == "ready" && snapshot != nil && snapshot.Fresh(time.Now()) && !snapshot.AdmissionReady {
-			continue
-		}
-		readback, err := r.proxy.States(ctx)
 		if err != nil {
-			continue
+			r.markApplyError(ctx, conn, "proxy_confirmation_failed")
+			return
 		}
-		got, ok := readback[n.ID]
-		if !ok || got.Weight != target || snapshot == nil || !snapshot.Fresh(time.Now()) || snapshot.ObservedRevision != n.Revision {
-			continue
-		}
-		if state == "ready" && !strings.HasPrefix(got.State, "UP") {
-			continue
-		}
-		if state != "ready" && !strings.Contains(got.State, "DRAIN") && !strings.Contains(got.State, "MAINT") {
-			continue
-		}
-		_, _ = r.db.ExecContext(ctx, `UPDATE cluster_nodes SET applied_revision=$3,applied_at=NOW(),apply_error=NULL WHERE cluster_id=$1 AND node_id=$2 AND revision=$3 AND applied_revision<>$3`, r.cfg.Cluster.ID, n.ID, n.Revision)
-		_, _ = r.db.ExecContext(ctx, `UPDATE cluster_operations SET status='applied',applied_at=NOW(),error_code=NULL WHERE cluster_id=$1 AND node_id=$2 AND target_revision=$3 AND status IN ('pending','error')`, r.cfg.Cluster.ID, n.ID, n.Revision)
 	}
 }
-func (r *Runtime) markApplyError(ctx context.Context, code string) {
-	_, _ = r.db.ExecContext(ctx, `UPDATE cluster_nodes SET apply_error=$2 WHERE cluster_id=$1 AND applied_revision<>revision AND apply_error IS DISTINCT FROM $2`, r.cfg.Cluster.ID, code)
-	_, _ = r.db.ExecContext(ctx, `UPDATE cluster_operations SET status='error',error_code=$2 WHERE cluster_id=$1 AND status='pending'`, r.cfg.Cluster.ID, code)
+
+func (r *Runtime) markApplyError(ctx context.Context, conn *sql.Conn, code string) {
+	r.observeProxy("", code)
+	if !r.IsController() {
+		if r.lastProxyError != code {
+			logger.LegacyPrintf("cluster.proxy", "local ingress proxy reconciliation failed on %s: %s", r.cfg.Cluster.NodeID, code)
+		}
+		r.lastProxyError = code
+		return
+	}
+	_, _ = conn.ExecContext(ctx, `UPDATE cluster_nodes SET apply_error=$2 WHERE cluster_id=$1 AND applied_revision<>revision AND apply_error IS DISTINCT FROM $2`, r.cfg.Cluster.ID, code)
+	_, _ = conn.ExecContext(ctx, `UPDATE cluster_operations SET status='error',error_code=$2 WHERE cluster_id=$1 AND status='pending'`, r.cfg.Cluster.ID, code)
 }

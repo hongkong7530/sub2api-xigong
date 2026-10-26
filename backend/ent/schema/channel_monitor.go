@@ -82,6 +82,7 @@ func (ChannelMonitor) Fields() []ent.Field {
 		field.String("description_color").Default("").MaxLen(32),
 		field.Bool("enabled").
 			Default(true),
+		field.String("probe_mode").Default("hybrid").MaxLen(16),
 		field.Int("interval_seconds").
 			Range(15, 3600),
 		field.Int("jitter_seconds").

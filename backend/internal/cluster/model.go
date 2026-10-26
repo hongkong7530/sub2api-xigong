@@ -111,6 +111,14 @@ func (n Node) Validate() error {
 	return nil
 }
 
+// ProxyObservation is tied to a process and records a verified local runtime, not just its file.
+type ProxyObservation struct {
+	BootID   string    `json:"boot_id"`
+	At       time.Time `json:"sampled_at"`
+	Revision string    `json:"revision"`
+	Error    string    `json:"error,omitempty"`
+}
+
 type Snapshot struct {
 	NodeID            string    `json:"node_id"`
 	BootID            string    `json:"boot_id"`
@@ -128,12 +136,17 @@ type Snapshot struct {
 	DBConnections     int       `json:"db_connections"`
 	DBPoolMax         *int      `json:"db_pool_max,omitempty"`
 	DBPoolIdle        *int      `json:"db_pool_idle,omitempty"`
-	RedisPoolMax      *int      `json:"redis_pool_max,omitempty"`
-	RedisPoolTotal    *int      `json:"redis_pool_total,omitempty"`
-	RedisPoolIdle     *int      `json:"redis_pool_idle,omitempty"`
-	Version           string    `json:"version"`
+	DBPoolOpen        *int      `json:"db_pool_open,omitempty"`
+	// Wait counters are cumulative within BootID; absent fields mean an older node.
+	DBPoolWaitCount *int64 `json:"db_pool_wait_count,omitempty"`
+	DBPoolWaitMS    *int64 `json:"db_pool_wait_ms,omitempty"`
+	RedisPoolMax    *int   `json:"redis_pool_max,omitempty"`
+	RedisPoolTotal  *int   `json:"redis_pool_total,omitempty"`
+	RedisPoolIdle   *int   `json:"redis_pool_idle,omitempty"`
+	Version         string `json:"version"`
 	// AdmissionBlockedBy names a role/capability self-check that withholds admission.
-	AdmissionBlockedBy string `json:"admission_blocked_by,omitempty"`
+	AdmissionBlockedBy string            `json:"admission_blocked_by,omitempty"`
+	Proxy              *ProxyObservation `json:"proxy,omitempty"`
 }
 
 func (s Snapshot) Fresh(now time.Time) bool {

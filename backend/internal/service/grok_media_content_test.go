@@ -217,6 +217,7 @@ func TestForwardGrokMediaContentFetchesValidatedSignedURLWithoutCredentials(t *t
 	require.Empty(t, upstream.requests[1].Header.Get("Authorization"))
 	require.Empty(t, upstream.requests[1].Header.Get("User-Agent"))
 	require.Equal(t, "bytes=0-12", upstream.requests[1].Header.Get("Range"))
+	require.True(t, HTTPUpstreamPublicHostsOnly(upstream.requests[1].Context()))
 	require.True(t, HTTPUpstreamRedirectsDisabled(upstream.requests[1].Context()))
 }
 

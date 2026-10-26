@@ -29,6 +29,16 @@ class StateCredentialTests(unittest.TestCase):
             self.assertNotIn('GRANT UPDATE(redis_generation', statement)
             self.assertNotIn('GRANT INSERT, UPDATE, DELETE ON cluster_control,', statement)
             self.assertIn("'cluster_pricing_revision'", statement)
+            for table in ('site_profit_meta', 'site_profit_cost_versions', 'site_profit_entries', 'site_profit_group_daily', 'site_profit_group_totals', 'site_profit_user_totals'):
+                self.assertIn("'" + table + "'", statement)
+            self.assertIn("IF to_regclass('public.site_profit_entries') IS NOT NULL", statement)
+            self.assertIn('GRANT UPDATE (aggregated) ON public.site_profit_entries', statement)
+            self.assertIn('GRANT UPDATE (aggregated_at,backlog) ON public.site_profit_meta', statement)
+            self.assertIn('GRANT INSERT ON public.site_profit_cost_versions', statement)
+            self.assertNotIn('GRANT UPDATE ON public.site_profit_entries', statement)
+            self.assertIn("'bot_installations'", statement)
+            self.assertIn('REVOKE ALL ON bot_installations FROM', statement)
+            self.assertNotIn('GRANT SELECT,INSERT ON bot_installations', statement)
             self.assertTrue(args.output.exists())
 
     def test_certificate_rotation_uses_a_new_state_identity(self):

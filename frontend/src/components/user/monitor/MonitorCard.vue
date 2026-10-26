@@ -79,7 +79,7 @@
         <strong class="mt-0.5 text-base font-black tabular-nums">×{{ formatRate(item.group_insight.peak_rate_multiplier) }}</strong>
       </span>
       <span :title="t('monitorCommon.cacheSamplesHint', { n: item.group_insight.cache_sample_count ?? 0 })" class="flex flex-col rounded-lg bg-emerald-50 px-3 py-2.5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-        <span class="text-xs font-medium opacity-75">{{ t('monitorCommon.groupCache') }} · {{ t('monitorCommon.cacheWindow24h') }}</span>
+        <span class="text-xs font-medium opacity-75">{{ t('monitorCommon.groupCache') }} · {{ cacheWindowLabel }}</span>
         <strong class="mt-0.5 text-base font-black tabular-nums">{{ item.group_insight.cache_hit_rate == null ? '—' : `${item.group_insight.cache_hit_rate.toFixed(1)}%` }}</strong>
       </span>
     </div>
@@ -176,6 +176,12 @@ const {
 const providerTintClass = computed(() =>
   PROVIDER_TINT[props.item.provider] ?? 'text-gray-500 dark:text-gray-300'
 )
+
+const cacheWindowLabel = computed(() => {
+  const seconds = props.item.group_insight?.cache_window_seconds ?? 1800
+  const key = seconds === 3600 ? '1h' : seconds === 21600 ? '6h' : seconds === 86400 ? '24h' : '30m'
+  return t(`monitorCommon.cacheRateWindowTab.${key}`)
+})
 
 const quotaVisible = computed(
   () => isChannelMonitorQuotaVisible() && !!props.item.latest_quota

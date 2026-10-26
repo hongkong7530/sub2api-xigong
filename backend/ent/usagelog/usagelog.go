@@ -82,6 +82,8 @@ const (
 	FieldDurationMs = "duration_ms"
 	// FieldOutputDurationMs holds the string denoting the output_duration_ms field in the database.
 	FieldOutputDurationMs = "output_duration_ms"
+	// FieldRateObservation holds the string denoting the rate_observation field in the database.
+	FieldRateObservation = "rate_observation"
 	// FieldFirstTokenMs holds the string denoting the first_token_ms field in the database.
 	FieldFirstTokenMs = "first_token_ms"
 	// FieldUserAgent holds the string denoting the user_agent field in the database.
@@ -196,6 +198,7 @@ var Columns = []string{
 	FieldStream,
 	FieldDurationMs,
 	FieldOutputDurationMs,
+	FieldRateObservation,
 	FieldFirstTokenMs,
 	FieldUserAgent,
 	FieldIPAddress,

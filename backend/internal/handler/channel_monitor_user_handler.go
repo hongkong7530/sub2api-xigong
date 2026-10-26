@@ -55,27 +55,27 @@ func (h *ChannelMonitorUserHandler) quotaVisible(c *gin.Context) bool {
 // --- Response ---
 
 type channelMonitorUserListItem struct {
-	ID                   int64                                `json:"id"`
-	Name                 string                               `json:"name"`
-	Provider             string                               `json:"provider"`
-	GroupName            string                               `json:"group_name"`
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Provider  string `json:"provider"`
+	GroupName string `json:"group_name"`
 	// GroupID 绑定分组 ID；订阅/反馈入口以它为键，未绑定为 null。
-	GroupID          *int64 `json:"group_id"`
-	PrimaryModel     string `json:"primary_model"`
-	PrimaryStatus    string `json:"primary_status"`
-	StatusSource string `json:"status_source"`
+	GroupID          *int64     `json:"group_id"`
+	PrimaryModel     string     `json:"primary_model"`
+	PrimaryStatus    string     `json:"primary_status"`
+	StatusSource     string     `json:"status_source"`
 	StatusObservedAt *time.Time `json:"status_observed_at"`
 	// OverallStatus 全部被监控模型的最优状态（一绿即绿）；整卡颜色用。
 	OverallStatus    string `json:"overall_status"`
 	PrimaryLatencyMs *int   `json:"primary_latency_ms"`
 	// PrimaryFirstTokenMs 主模型最近一次首字延迟（TTFT）毫秒。
-	PrimaryFirstTokenMs  *int   `json:"primary_first_token_ms"`
-	PrimaryOutputTokensPerSecond *float64 `json:"primary_output_tokens_per_second"`
-	PrimaryPingLatencyMs *int                                 `json:"primary_ping_latency_ms"`
-	Availability7d       *float64                              `json:"availability_7d"`
-	AvailabilitySamples7d int `json:"availability_samples_7d"`
-	ExtraModels          []dto.ChannelMonitorExtraModelStatus `json:"extra_models"`
-	Timeline             []channelMonitorUserTimelinePoint    `json:"timeline"`
+	PrimaryFirstTokenMs          *int                                 `json:"primary_first_token_ms"`
+	PrimaryOutputTokensPerSecond *float64                             `json:"primary_output_tokens_per_second"`
+	PrimaryPingLatencyMs         *int                                 `json:"primary_ping_latency_ms"`
+	Availability7d               *float64                             `json:"availability_7d"`
+	AvailabilitySamples7d        int                                  `json:"availability_samples_7d"`
+	ExtraModels                  []dto.ChannelMonitorExtraModelStatus `json:"extra_models"`
+	Timeline                     []channelMonitorUserTimelinePoint    `json:"timeline"`
 	// LatestQuota 主模型最近配额快照；channel_monitor_show_quota=false 时
 	// 由 userMonitorViewToItem 的调用方传入 false 剥离（服务端脱敏，非仅前端隐藏）。
 	LatestQuota *domain.MonitorQuotaSnapshot `json:"latest_quota,omitempty"`
@@ -85,15 +85,15 @@ type channelMonitorUserListItem struct {
 
 // channelMonitorGroupInsightPayload 用户端分组实时指标（倍率/缓存率/首字样本）。
 type channelMonitorGroupInsightPayload struct {
-	RateMultiplier          float64                         `json:"rate_multiplier"`
-	EffectiveRateMultiplier float64                         `json:"effective_rate_multiplier"`
-	PeakRateEnabled         bool                            `json:"peak_rate_enabled"`
-	PeakRateMultiplier      float64                         `json:"peak_rate_multiplier"`
-	AppliedPeakMultiplier   float64                         `json:"applied_peak_multiplier"`
+	RateMultiplier          float64                          `json:"rate_multiplier"`
+	EffectiveRateMultiplier float64                          `json:"effective_rate_multiplier"`
+	PeakRateEnabled         bool                             `json:"peak_rate_enabled"`
+	PeakRateMultiplier      float64                          `json:"peak_rate_multiplier"`
+	AppliedPeakMultiplier   float64                          `json:"applied_peak_multiplier"`
 	CacheHitRate            *float64                         `json:"cache_hit_rate"`
-	CacheSampleCount int64 `json:"cache_sample_count"`
-	CacheWindowSeconds int64 `json:"cache_window_seconds"`
-	RateHistory             []channelMonitorGroupRatePoint  `json:"rate_history,omitempty"`
+	CacheSampleCount        int64                            `json:"cache_sample_count"`
+	CacheWindowSeconds      int64                            `json:"cache_window_seconds"`
+	RateHistory             []channelMonitorGroupRatePoint   `json:"rate_history,omitempty"`
 	RecentFirstTokens       []channelMonitorPublicFirstToken `json:"recent_first_tokens"`
 }
 
@@ -105,13 +105,16 @@ type channelMonitorPublicFirstToken struct {
 }
 
 type channelMonitorGroupRatePoint struct {
+	IsInitial               bool    `json:"is_initial"`
 	RateMultiplier          float64 `json:"rate_multiplier"`
 	EffectiveRateMultiplier float64 `json:"effective_rate_multiplier"`
 	RecordedAt              string  `json:"recorded_at"`
 }
 
 func observedPercent(value float64, samples int64) *float64 {
-	if samples <= 0 { return nil }
+	if samples <= 0 {
+		return nil
+	}
 	return &value
 }
 
@@ -126,8 +129,8 @@ func groupInsightToPayload(v *service.UserGroupInsight) *channelMonitorGroupInsi
 		PeakRateMultiplier:      v.PeakRateMultiplier,
 		AppliedPeakMultiplier:   v.AppliedPeakMultiplier,
 		CacheHitRate:            observedPercent(v.CacheHitRate, v.CacheInputTokens),
-		CacheSampleCount: v.CacheSampleCount,
-		CacheWindowSeconds: v.CacheWindowSeconds,
+		CacheSampleCount:        v.CacheSampleCount,
+		CacheWindowSeconds:      v.CacheWindowSeconds,
 	}
 	out.RecentFirstTokens = make([]channelMonitorPublicFirstToken, 0, len(v.RecentFirstTokens))
 	for _, sample := range v.RecentFirstTokens {
@@ -144,6 +147,7 @@ func groupInsightToPayload(v *service.UserGroupInsight) *channelMonitorGroupInsi
 	}
 	for _, p := range v.RateHistory {
 		out.RateHistory = append(out.RateHistory, channelMonitorGroupRatePoint{
+			IsInitial:               p.IsInitial,
 			RateMultiplier:          p.RateMultiplier,
 			EffectiveRateMultiplier: p.EffectiveRateMultiplier,
 			RecordedAt:              p.RecordedAt.UTC().Format(time.RFC3339),
@@ -156,13 +160,13 @@ func groupInsightToPayload(v *service.UserGroupInsight) *channelMonitorGroupInsi
 // 仅用于用户视图 list 响应，admin 视图不使用。
 type channelMonitorUserTimelinePoint struct {
 	OutputTokensPerSecond *float64 `json:"output_tokens_per_second"`
-	Model string `json:"model"`
-	Source string `json:"source"`
-	Status        string `json:"status"`
-	LatencyMs     *int   `json:"latency_ms"`
-	FirstTokenMs  *int   `json:"first_token_ms"`
-	PingLatencyMs *int   `json:"ping_latency_ms"`
-	CheckedAt     string `json:"checked_at"`
+	Model                 string   `json:"model"`
+	Source                string   `json:"source"`
+	Status                string   `json:"status"`
+	LatencyMs             *int     `json:"latency_ms"`
+	FirstTokenMs          *int     `json:"first_token_ms"`
+	PingLatencyMs         *int     `json:"ping_latency_ms"`
+	CheckedAt             string   `json:"checked_at"`
 }
 
 type channelMonitorUserDetailResponse struct {
@@ -172,30 +176,30 @@ type channelMonitorUserDetailResponse struct {
 	GroupName string                        `json:"group_name"`
 	Models    []channelMonitorUserModelStat `json:"models"`
 	// GroupInsight 分组实时指标 + 倍率变更历史（画曲线用）。
-	GroupInsight *channelMonitorGroupInsightPayload `json:"group_insight,omitempty"`
-	GroupAvailability map[int]*float64 `json:"group_availability,omitempty"`
+	GroupInsight      *channelMonitorGroupInsightPayload `json:"group_insight,omitempty"`
+	GroupAvailability map[int]*float64                   `json:"group_availability,omitempty"`
 }
 
 type channelMonitorUserModelStat struct {
-	Model           string  `json:"model"`
-	LatestStatus    string  `json:"latest_status"`
-	LatestLatencyMs *int    `json:"latest_latency_ms"`
+	Model           string `json:"model"`
+	LatestStatus    string `json:"latest_status"`
+	LatestLatencyMs *int   `json:"latest_latency_ms"`
 	// LatestFirstTokenMs 最近一次首字延迟（TTFT）毫秒。
-	LatestFirstTokenMs *int `json:"latest_first_token_ms"`
+	LatestFirstTokenMs          *int     `json:"latest_first_token_ms"`
 	LatestOutputTokensPerSecond *float64 `json:"latest_output_tokens_per_second"`
-	Availability7d  *float64 `json:"availability_7d"`
-	Availability15d *float64 `json:"availability_15d"`
-	Availability30d *float64 `json:"availability_30d"`
-	AvgLatency7dMs  *int    `json:"avg_latency_7d_ms"`
+	Availability7d              *float64 `json:"availability_7d"`
+	Availability15d             *float64 `json:"availability_15d"`
+	Availability30d             *float64 `json:"availability_30d"`
+	AvgLatency7dMs              *int     `json:"avg_latency_7d_ms"`
 }
 
 func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channelMonitorUserListItem {
 	extras := make([]dto.ChannelMonitorExtraModelStatus, 0, len(v.ExtraModels))
 	for _, e := range v.ExtraModels {
 		extras = append(extras, dto.ChannelMonitorExtraModelStatus{
-			Model:     e.Model,
-			Status:    e.Status,
-			LatencyMs: e.LatencyMs,
+			Model:        e.Model,
+			Status:       e.Status,
+			LatencyMs:    e.LatencyMs,
 			FirstTokenMs: e.FirstTokenMs,
 		})
 	}
@@ -203,28 +207,28 @@ func userMonitorViewToItem(v *service.UserMonitorView, includeQuota bool) channe
 	for _, p := range v.Timeline {
 		timeline = append(timeline, channelMonitorUserTimelinePoint{
 			Model: p.Model, Source: p.Source,
-			Status:        p.Status,
-			LatencyMs:     p.LatencyMs,
-			FirstTokenMs:  p.FirstTokenMs,
+			Status:                p.Status,
+			LatencyMs:             p.LatencyMs,
+			FirstTokenMs:          p.FirstTokenMs,
 			OutputTokensPerSecond: p.OutputTokensPerSecond,
-			CheckedAt:     p.CheckedAt.UTC().Format(time.RFC3339),
+			CheckedAt:             p.CheckedAt.UTC().Format(time.RFC3339),
 		})
 	}
 	item := channelMonitorUserListItem{
-		ID:                   v.ID,
-		Name:                 v.Name,
-		Provider:             v.Provider,
-		GroupName:            v.GroupName,
-		PrimaryModel:         v.PrimaryModel,
-		PrimaryStatus:        v.PrimaryStatus,
-		StatusSource: v.StatusSource,
-		StatusObservedAt: v.StatusObservedAt,
-		PrimaryLatencyMs:     v.PrimaryLatencyMs,
+		ID:                           v.ID,
+		Name:                         v.Name,
+		Provider:                     v.Provider,
+		GroupName:                    v.GroupName,
+		PrimaryModel:                 v.PrimaryModel,
+		PrimaryStatus:                v.PrimaryStatus,
+		StatusSource:                 v.StatusSource,
+		StatusObservedAt:             v.StatusObservedAt,
+		PrimaryLatencyMs:             v.PrimaryLatencyMs,
 		PrimaryOutputTokensPerSecond: v.PrimaryOutputTokensPerSecond,
-		Availability7d:       observedPercent(v.Availability7d, int64(v.AvailabilitySamples7d)),
-		AvailabilitySamples7d: v.AvailabilitySamples7d,
-		ExtraModels:          extras,
-		Timeline:             timeline,
+		Availability7d:               observedPercent(v.Availability7d, int64(v.AvailabilitySamples7d)),
+		AvailabilitySamples7d:        v.AvailabilitySamples7d,
+		ExtraModels:                  extras,
+		Timeline:                     timeline,
 	}
 	if includeQuota {
 		item.LatestQuota = v.LatestQuota
@@ -240,39 +244,69 @@ func userMonitorDetailToResponse(d *service.UserMonitorDetail) *channelMonitorUs
 	models := make([]channelMonitorUserModelStat, 0, len(d.Models))
 	for _, m := range d.Models {
 		models = append(models, channelMonitorUserModelStat{
-			Model:              m.Model,
-			LatestStatus:       m.LatestStatus,
-			LatestLatencyMs:    m.LatestLatencyMs,
-			LatestFirstTokenMs: m.LatestFirstTokenMs,
+			Model:                       m.Model,
+			LatestStatus:                m.LatestStatus,
+			LatestLatencyMs:             m.LatestLatencyMs,
+			LatestFirstTokenMs:          m.LatestFirstTokenMs,
 			LatestOutputTokensPerSecond: m.LatestOutputTokensPerSecond,
-			Availability7d:  observedPercent(m.Availability7d,int64(m.Samples7d)),
-			Availability15d: observedPercent(m.Availability15d,int64(m.Samples15d)),
-			Availability30d: observedPercent(m.Availability30d,int64(m.Samples30d)),
-			AvgLatency7dMs:  m.AvgLatency7dMs,
+			Availability7d:              observedPercent(m.Availability7d, int64(m.Samples7d)),
+			Availability15d:             observedPercent(m.Availability15d, int64(m.Samples15d)),
+			Availability30d:             observedPercent(m.Availability30d, int64(m.Samples30d)),
+			AvgLatency7dMs:              m.AvgLatency7dMs,
 		})
 	}
-	availability := make(map[int]*float64,len(d.GroupAvailability))
-	for days,a := range d.GroupAvailability { availability[days] = observedPercent(a.AvailabilityPct,int64(a.TotalChecks)) }
+	availability := make(map[int]*float64, len(d.GroupAvailability))
+	for days, a := range d.GroupAvailability {
+		availability[days] = observedPercent(a.AvailabilityPct, int64(a.TotalChecks))
+	}
 	return &channelMonitorUserDetailResponse{
 		GroupAvailability: availability,
-		ID:           d.ID,
-		Name:         d.Name,
-		Provider:     d.Provider,
-		GroupName:    d.GroupName,
-		Models:       models,
-		GroupInsight: groupInsightToPayload(d.GroupInsight),
+		ID:                d.ID,
+		Name:              d.Name,
+		Provider:          d.Provider,
+		GroupName:         d.GroupName,
+		Models:            models,
+		GroupInsight:      groupInsightToPayload(d.GroupInsight),
 	}
 }
 
 // --- Handlers ---
 
+// cacheRateWindowFromQuery accepts only the UI's supported cache-rate windows.
+func cacheRateWindowFromQuery(raw string) (time.Duration, bool) {
+	if raw == "" {
+		return service.DefaultCacheRateWindow, true
+	}
+	seconds, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	switch seconds {
+	case 1800:
+		return 30 * time.Minute, true
+	case 3600:
+		return time.Hour, true
+	case 21600:
+		return 6 * time.Hour, true
+	case 86400:
+		return 24 * time.Hour, true
+	default:
+		return 0, false
+	}
+}
+
 // List GET /api/v1/channel-monitors
 func (h *ChannelMonitorUserHandler) List(c *gin.Context) {
+	cacheWindow, ok := cacheRateWindowFromQuery(c.Query("cache_window_seconds"))
+	if !ok {
+		response.BadRequest(c, "Invalid cache rate window")
+		return
+	}
 	if !h.featureEnabled(c) {
 		response.Success(c, gin.H{"items": []channelMonitorUserListItem{}})
 		return
 	}
-	views, err := h.monitorService.ListUserView(c.Request.Context())
+	views, err := h.monitorService.ListUserViewWithCacheRateWindow(c.Request.Context(), cacheWindow)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -16,6 +16,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCacheRateWindowFromQueryUsesDefaultAndExactAllowlist(t *testing.T) {
+	for _, tc := range []struct {
+		raw      string
+		want     time.Duration
+		valid    bool
+	}{
+		{raw: "", want: 30 * time.Minute, valid: true},
+		{raw: "1800", want: 30 * time.Minute, valid: true},
+		{raw: "3600", want: time.Hour, valid: true},
+		{raw: "21600", want: 6 * time.Hour, valid: true},
+		{raw: "86400", want: 24 * time.Hour, valid: true},
+		{raw: "1801", valid: false},
+		{raw: "9223372036854775807", valid: false},
+		{raw: "30m", valid: false},
+	} {
+		got, valid := cacheRateWindowFromQuery(tc.raw)
+		require.Equal(t, tc.valid, valid, "raw=%q", tc.raw)
+		if valid {
+			require.Equal(t, tc.want, got, "raw=%q", tc.raw)
+		}
+	}
+}
+
 func TestPublicMonitorCardWhitelistPreservesUnknownAndLatestFailure(t *testing.T) {
 	gid := int64(7)
 	observed := time.Now().UTC()

@@ -57,13 +57,11 @@ async function bootstrap() {
   }
   updateFavicon(appStore.siteLogo)
 
-  await initI18n()
-
-  app.use(router)
+  // 语言包与首路由组件同时加载；两者都就绪前不挂载，避免串行网络等待及未翻译首屏。
+  const localeReady = initI18n()
   app.use(i18n)
-
-  // 等待路由器完成初始导航后再挂载，避免竞态条件导致的空白渲染
-  await router.isReady()
+  app.use(router)
+  await Promise.all([localeReady, router.isReady()])
   app.mount('#app')
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// MonitorOutputRate measures generation throughput, not whole-request latency.
+// MonitorOutputRate calculates observed arrival throughput, not model-internal generation speed.
 // Counts come from upstream usage (including reasoning where reported). Missing
 // timing/counts stay unknown; neither text length nor an older sample is a fallback.
 func MonitorOutputRate(outputTokens int64, durationMs, firstTokenMs *int) *float64 {

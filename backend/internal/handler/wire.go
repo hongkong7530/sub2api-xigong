@@ -194,6 +194,8 @@ func ProvideAdminSettingHandler(settingService *service.SettingService, emailSer
 // ProvideHandlers creates the Handlers struct
 func ProvideHandlers(
  siteContentHandler *SiteContentHandler,
+ siteProfitHandler *SiteProfitHandler,
+ botHandler *BotHandler,
 	authHandler *AuthHandler,
 	userHandler *UserHandler,
 	apiKeyHandler *APIKeyHandler,
@@ -224,6 +226,8 @@ func ProvideHandlers(
 ) *Handlers {
 	return &Handlers{
  SiteContent: siteContentHandler,
+ SiteProfit: siteProfitHandler,
+ Bot: botHandler,
 		Auth:             authHandler,
 		User:             userHandler,
 		APIKey:           apiKeyHandler,
@@ -255,6 +259,8 @@ func ProvideHandlers(
 var ProviderSet = wire.NewSet(
 	// Top-level handlers
  NewSiteContentHandler,
+ NewSiteProfitHandler,
+ NewBotHandler,
 	NewAuthHandler,
 	NewUserHandler,
 	NewAPIKeyHandler,

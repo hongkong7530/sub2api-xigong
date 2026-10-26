@@ -43,6 +43,56 @@ func TestClusterRecoveryReserveCapacityAndConfirmation(t *testing.T) {
 	require.Empty(t, entries)
 }
 
+func TestClusterRecoveryReserveRegistryCapacity(t *testing.T) {
+	r, err := NewRecoveryReserve(t.TempDir(), 1)
+	require.NoError(t, err)
+	first, second := uuid.NewString(), uuid.NewString()
+	require.NoError(t, r.Reserve(first))
+	require.NoError(t, r.SaveEvent(first, "money", []byte(`{"amount":1}`)))
+	ready, err := r.ConfigureCapacity(1)
+	require.NoError(t, err)
+	require.False(t, ready)
+
+	ready, err = r.ConfigureCapacity(2)
+	require.NoError(t, err)
+	require.True(t, ready)
+	require.NoError(t, r.Reserve(second))
+	ready, err = r.ConfigureCapacity(2)
+	require.NoError(t, err)
+	require.False(t, ready)
+	require.Error(t, r.Reserve(uuid.NewString()))
+
+	ready, err = r.ConfigureCapacity(1)
+	require.NoError(t, err)
+	require.False(t, ready)
+	entries, err := r.ReadAll()
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "shrinking capacity must preserve every obligation")
+	require.NotEmpty(t, entries[first])
+	require.Error(t, r.Confirm(first), "capacity changes must not consume monetary evidence")
+	require.NoError(t, r.Confirm(second))
+	ready, err = r.ConfigureCapacity(1)
+	require.NoError(t, err)
+	require.False(t, ready)
+	require.NoError(t, r.ReleaseAfterReplay(first))
+	ready, err = r.ConfigureCapacity(1)
+	require.NoError(t, err)
+	require.True(t, ready)
+}
+
+func TestClusterRecoveryReserveCapacityFailsClosed(t *testing.T) {
+	r, err := NewRecoveryReserve(t.TempDir(), 1)
+	require.NoError(t, err)
+	ready, err := r.ConfigureCapacity(0)
+	require.Error(t, err)
+	require.False(t, ready)
+	require.Equal(t, 1, r.max)
+	require.NoError(t, os.Rename(r.dir, r.dir+".unavailable"))
+	ready, err = r.ConfigureCapacity(2)
+	require.Error(t, err)
+	require.False(t, ready)
+}
+
 func clearSlotFrame(t *testing.T, path string) {
 	t.Helper()
 	file, err := os.OpenFile(path, os.O_RDWR, 0600)

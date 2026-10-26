@@ -1790,6 +1790,16 @@ func OutputDurationMsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldOutputDurationMs))
 }
 
+// RateObservationIsNil applies the IsNil predicate on the "rate_observation" field.
+func RateObservationIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldRateObservation))
+}
+
+// RateObservationNotNil applies the NotNil predicate on the "rate_observation" field.
+func RateObservationNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldRateObservation))
+}
+
 // FirstTokenMsEQ applies the EQ predicate on the "first_token_ms" field.
 func FirstTokenMsEQ(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldFirstTokenMs, v))

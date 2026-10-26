@@ -401,6 +401,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 			UpstreamModel:                 upstreamModel,
 			UpstreamResponseModel:         observedUpstreamResponseModel(c),
 			OutputDurationMs:              observedStreamOutputDuration(c),
+			RateObservation:               observedStreamRateObservation(c),
 			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 			UpstreamResponseServiceTier:   observedUpstreamResponseServiceTier(c),
 			ReasoningEffort:               reasoningEffort,

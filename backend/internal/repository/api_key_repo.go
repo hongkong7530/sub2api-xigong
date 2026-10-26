@@ -109,6 +109,9 @@ func (r *apiKeyRepository) GetKeyAndOwnerID(ctx context.Context, id int64) (stri
 }
 
 func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.APIKey, error) {
+	if r.sql != nil && r.client.Driver().Dialect() == dialect.Postgres && !mixins.IsSoftDeleteSkipped(ctx) {
+		return r.getByKeyPostgres(ctx, key)
+	}
 	m, err := r.activeQuery().
 		Where(apikey.KeyEQ(key)).
 		WithUser(func(q *dbent.UserQuery) {

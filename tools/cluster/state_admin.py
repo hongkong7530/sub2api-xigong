@@ -77,15 +77,27 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO __ROLE__;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO __ROLE__;
 DO $permissions$ DECLARE item record; BEGIN
   FOR item IN SELECT tablename FROM pg_tables WHERE schemaname='public'
-    AND tablename NOT IN ('schema_migrations','atlas_schema_revisions','security_secrets','settings','cluster_control','cluster_nodes','cluster_join_tokens','cluster_operations','cluster_node_credentials','cluster_pricing_revision')
+    AND tablename NOT IN ('schema_migrations','atlas_schema_revisions','security_secrets','settings','cluster_control','cluster_nodes','cluster_join_tokens','cluster_operations','cluster_node_credentials','cluster_pricing_revision','site_profit_meta','site_profit_cost_versions','site_profit_entries','site_profit_group_daily','site_profit_group_totals','site_profit_user_totals','bot_installations')
   LOOP EXECUTE format('GRANT INSERT, UPDATE, DELETE ON TABLE public.%I TO %I',item.tablename,__ROLE_LITERAL__); END LOOP;
 END $permissions$;
+-- Financial facts are inserted by the definer trigger; nodes only mark aggregation progress.
+DO $profit_permissions$ BEGIN
+  IF to_regclass('public.site_profit_entries') IS NOT NULL THEN
+    GRANT INSERT ON public.site_profit_cost_versions TO __ROLE__;
+    GRANT UPDATE (aggregated_at,backlog) ON public.site_profit_meta TO __ROLE__;
+    GRANT UPDATE (aggregated) ON public.site_profit_entries TO __ROLE__;
+    GRANT INSERT,UPDATE ON public.site_profit_group_daily,public.site_profit_group_totals,public.site_profit_user_totals TO __ROLE__;
+  END IF;
+END $profit_permissions$;
 GRANT EXECUTE ON FUNCTION cluster_observe_redis_generation(TEXT,TEXT) TO __ROLE__;
 INSERT INTO cluster_node_credentials(cluster_id,node_id,database_role,redis_user) VALUES(__CLUSTER__,__NODE__,__ROLE_LITERAL__,__USER_LITERAL__);
 COMMIT;"""
     replacements = {"ROLE_LITERAL": literal(role), "USER_LITERAL": literal(user), "PASSWORD": literal(db_password), "DATABASE": '"' + args.database + '"', "CLUSTER": literal(args.cluster), "NODE": literal(args.node), "LIMIT": str(node["connections"]), "ROLE": '"' + role + '"'}
     for key in ("ROLE_LITERAL", "USER_LITERAL", "PASSWORD", "DATABASE", "CLUSTER", "NODE", "LIMIT", "ROLE"):
         statement = statement.replace("__" + key + "__", replacements[key])
+    # Gateway-only workers must not read signing material via broad SELECT grants.
+    bot_privileges = ('GRANT SELECT,INSERT ON bot_installations TO "' + role + '"; GRANT UPDATE (revoked_at) ON bot_installations TO "' + role + '";') if 'ingress' in node['roles'] else ('REVOKE ALL ON bot_installations FROM "' + role + '";')
+    statement = statement.replace('COMMIT;', "DO $bot_permissions$ BEGIN IF to_regclass('public.bot_installations') IS NOT NULL THEN " + bot_privileges + ' END IF; END $bot_permissions$; COMMIT;')
     if "controller" in node["roles"]:
         statement = statement.replace("COMMIT;", "GRANT INSERT, UPDATE, DELETE ON cluster_control, cluster_nodes, cluster_join_tokens, cluster_operations, cluster_node_credentials TO \"" + role + "\"; COMMIT;")
     if "ingress" in node["roles"] or "maintenance" in node["roles"]:

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"io"
 	"log/slog"
 	"net/http"
@@ -633,6 +634,7 @@ type ForwardResult struct {
 	Duration                    time.Duration
 	FirstTokenMs                *int // 首字时间（流式请求）
 	OutputDurationMs            *int // 首个正式流事件至成功终态；与TTFT分离
+	RateObservation             *ratemetric.Observation
 	ClientDisconnect            bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort             *string
 	// RequestedReasoningEffort is the client-requested effort before mapping.

@@ -33,7 +33,7 @@ const localizedMessages: Record<'en' | 'zh', Record<string, string>> = {
 }
 
 const messages: Record<string, string> = {
-  'usage.outputTps': 'Output TPS',
+  'usage.outputTps': 'Observed output rate',
   'admin.usage.userDeletedBadge': 'Deleted',
   'usage.costDetails': 'Cost Breakdown',
   'admin.usage.inputCost': 'Input Cost',
@@ -196,7 +196,7 @@ describe('admin UsageTable tooltip', () => {
   })
 
   it('highlights the whole record only above 200 tok/s, regardless of tier', () => {
-    const row = { ...baseImageRow, image_count: 0, billing_mode: 'token', output_tokens: 2001, duration_ms: 20000, first_token_ms: 10000, output_duration_ms: 10000 }
+    const row = { ...baseImageRow, image_count: 0, billing_mode: 'token', output_tokens: 2001, duration_ms: 20000, first_token_ms: 10000, output_duration_ms: 10000, rate_observation: { version: 1, window_ms: 10000, output_events: 10, event_span_ms: 9000, output_bytes: 1000, max_burst_bytes: 100, quality: 'observed' } }
     const wrapper = mount(UsageTable, {
       props: { data: [row, { ...row, request_id: 'boundary', output_tokens: 2000 }, { ...row, request_id: 'missing', output_duration_ms: null }], columns: [], loading: false },
       global: { stubs: { DataTable: DataTableStub, Icon: true, Teleport: true } },
@@ -204,6 +204,20 @@ describe('admin UsageTable tooltip', () => {
     expect(wrapper.get('[data-request-id="req-admin-image"]').classes()).toContain('usage-row--high-speed')
     expect(wrapper.get('[data-request-id="boundary"]').classes()).not.toContain('usage-row--high-speed')
     expect(wrapper.get('[data-request-id="missing"]').classes()).not.toContain('usage-row--high-speed')
+    wrapper.unmount()
+  })
+
+  it('restores long-window reception effects while keeping short and incomplete rows plain', () => {
+    const row = { ...baseImageRow, image_count: 0, billing_mode: 'token', output_tokens: 3000, output_duration_ms: 10000, rate_observation: { version: 1, window_ms: 10000, output_events: 10, event_span_ms: 9000, output_bytes: 1000, max_burst_bytes: 100, quality: 'timing_uncertain' } }
+    const wrapper = mount(UsageTable, {
+      props: { data: [row, { ...row, request_id: 'purple', output_tokens: 2001 }, { ...row, request_id: 'short', output_tokens: 143, output_duration_ms: 106, rate_observation: { ...row.rate_observation, window_ms: 106 } }, { ...row, request_id: 'incomplete', rate_observation: { ...row.rate_observation, quality: 'incomplete' } }], columns: [], loading: false },
+      global: { stubs: { DataTable: DataTableStub, Icon: true, Teleport: true } },
+    })
+    expect(wrapper.get('[data-request-id="req-admin-image"]').classes()).toContain('usage-row--golden')
+    expect(wrapper.get('[data-request-id="purple"]').classes()).toContain('usage-row--high-speed')
+    expect(wrapper.get('[data-request-id="purple"]').classes()).not.toContain('usage-row--golden')
+    expect(wrapper.get('[data-request-id="short"]').classes()).not.toContain('usage-row--high-speed')
+    expect(wrapper.get('[data-request-id="incomplete"]').classes()).not.toContain('usage-row--high-speed')
     wrapper.unmount()
   })
 
@@ -217,8 +231,8 @@ describe('admin UsageTable tooltip', () => {
       },
       global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
     })
-    expect(wrapper.findAll('[data-testid="output-tps"]').map(cell => cell.text())).toEqual(['100.0 tok/s', '—', '—'])
-    expect(wrapper.text()).toContain('Output TPS')
+    expect(wrapper.findAll('[data-testid="output-tps"]').map(cell => cell.text())).toEqual(['100.0 tok/susage.rateQuality.unknown', '—usage.rateQuality.unknown', '—usage.rateQuality.unknown'])
+    expect(wrapper.text()).toContain('Observed output rate')
   })
 
   beforeEach(() => {

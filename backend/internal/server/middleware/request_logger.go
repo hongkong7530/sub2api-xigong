@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -28,6 +30,7 @@ func RequestLogger() gin.HandlerFunc {
 		c.Header(requestIDHeader, requestID)
 
 		ctx := context.WithValue(c.Request.Context(), ctxkey.RequestID, requestID)
+		ctx = ratemetric.WithClock(ctx, time.Now(), strings.EqualFold(c.GetHeader("Upgrade"), "websocket"))
 		clientRequestID, _ := ctx.Value(ctxkey.ClientRequestID).(string)
 		clientRequestID, _ = normalizeCorrelationID(clientRequestID)
 

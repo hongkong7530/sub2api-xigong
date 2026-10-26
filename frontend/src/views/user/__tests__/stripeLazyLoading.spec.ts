@@ -13,7 +13,18 @@ function readFrontendFile(path: string): string {
   return readFileSync(resolve(frontendRoot, path), 'utf8')
 }
 
-describe('Stripe lazy-loading contract', () => {
+describe('payment SDK lazy-loading contract', () => {
+  it('keeps Airwallex side effects out of the shared vendor chunk', () => {
+    const source = readFrontendFile('src/views/user/AirwallexPaymentView.vue')
+    expect(source).toContain("await import('@airwallex/components-sdk')")
+    const config = readFrontendFile('vite.config.ts')
+    const sdkRule = config.indexOf("id.includes('/@airwallex/components-sdk/')")
+    const fallback = config.indexOf("return 'vendor-misc'")
+    expect(sdkRule).toBeGreaterThan(-1)
+    expect(sdkRule).toBeLessThan(fallback)
+    expect(config.slice(sdkRule, fallback)).toContain("return 'vendor-airwallex'")
+  })
+
   it.each(stripeConsumers)('%s uses the side-effect-free Stripe loader', (path) => {
     const source = readFrontendFile(path)
 

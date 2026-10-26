@@ -50,6 +50,22 @@ func (r *RecoveryReserve) slot(id string) (string, error) {
 	}
 	return filepath.Join(r.dir, id+".slot"), nil
 }
+// ConfigureCapacity follows the registry without deleting existing obligations when
+// capacity shrinks. A full or unreadable reserve must stop new admission.
+func (r *RecoveryReserve) ConfigureCapacity(max int) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if max < 1 {
+		return false, fmt.Errorf("invalid recovery reserve capacity")
+	}
+	r.max = max
+	entries, err := os.ReadDir(r.dir)
+	if err != nil {
+		return false, err
+	}
+	return len(entries) < r.max, nil
+}
+
 func (r *RecoveryReserve) Reserve(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

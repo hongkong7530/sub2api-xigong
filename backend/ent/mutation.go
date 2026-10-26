@@ -58,6 +58,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 )
 
 const (
@@ -15688,6 +15689,7 @@ type ChannelMonitorMutation struct {
 	description               *string
 	description_color         *string
 	enabled                   *bool
+	probe_mode                *string
 	interval_seconds          *int
 	addinterval_seconds       *int
 	jitter_seconds            *int
@@ -16588,6 +16590,42 @@ func (m *ChannelMonitorMutation) ResetEnabled() {
 	m.enabled = nil
 }
 
+// SetProbeMode sets the "probe_mode" field.
+func (m *ChannelMonitorMutation) SetProbeMode(s string) {
+	m.probe_mode = &s
+}
+
+// ProbeMode returns the value of the "probe_mode" field in the mutation.
+func (m *ChannelMonitorMutation) ProbeMode() (r string, exists bool) {
+	v := m.probe_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeMode returns the old "probe_mode" field's value of the ChannelMonitor entity.
+// If the ChannelMonitor object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ChannelMonitorMutation) OldProbeMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeMode: %w", err)
+	}
+	return oldValue.ProbeMode, nil
+}
+
+// ResetProbeMode resets all changes to the "probe_mode" field.
+func (m *ChannelMonitorMutation) ResetProbeMode() {
+	m.probe_mode = nil
+}
+
 // SetIntervalSeconds sets the "interval_seconds" field.
 func (m *ChannelMonitorMutation) SetIntervalSeconds(i int) {
 	m.interval_seconds = &i
@@ -17157,7 +17195,7 @@ func (m *ChannelMonitorMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ChannelMonitorMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, channelmonitor.FieldCreatedAt)
 	}
@@ -17211,6 +17249,9 @@ func (m *ChannelMonitorMutation) Fields() []string {
 	}
 	if m.enabled != nil {
 		fields = append(fields, channelmonitor.FieldEnabled)
+	}
+	if m.probe_mode != nil {
+		fields = append(fields, channelmonitor.FieldProbeMode)
 	}
 	if m.interval_seconds != nil {
 		fields = append(fields, channelmonitor.FieldIntervalSeconds)
@@ -17280,6 +17321,8 @@ func (m *ChannelMonitorMutation) Field(name string) (ent.Value, bool) {
 		return m.DescriptionColor()
 	case channelmonitor.FieldEnabled:
 		return m.Enabled()
+	case channelmonitor.FieldProbeMode:
+		return m.ProbeMode()
 	case channelmonitor.FieldIntervalSeconds:
 		return m.IntervalSeconds()
 	case channelmonitor.FieldJitterSeconds:
@@ -17341,6 +17384,8 @@ func (m *ChannelMonitorMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldDescriptionColor(ctx)
 	case channelmonitor.FieldEnabled:
 		return m.OldEnabled(ctx)
+	case channelmonitor.FieldProbeMode:
+		return m.OldProbeMode(ctx)
 	case channelmonitor.FieldIntervalSeconds:
 		return m.OldIntervalSeconds(ctx)
 	case channelmonitor.FieldJitterSeconds:
@@ -17491,6 +17536,13 @@ func (m *ChannelMonitorMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEnabled(v)
+		return nil
+	case channelmonitor.FieldProbeMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeMode(v)
 		return nil
 	case channelmonitor.FieldIntervalSeconds:
 		v, ok := value.(int)
@@ -17770,6 +17822,9 @@ func (m *ChannelMonitorMutation) ResetField(name string) error {
 		return nil
 	case channelmonitor.FieldEnabled:
 		m.ResetEnabled()
+		return nil
+	case channelmonitor.FieldProbeMode:
+		m.ResetProbeMode()
 		return nil
 	case channelmonitor.FieldIntervalSeconds:
 		m.ResetIntervalSeconds()
@@ -49249,6 +49304,7 @@ type UsageLogMutation struct {
 	addduration_ms               *int
 	output_duration_ms           *int
 	addoutput_duration_ms        *int
+	rate_observation             **ratemetric.Observation
 	first_token_ms               *int
 	addfirst_token_ms            *int
 	user_agent                   *string
@@ -51138,6 +51194,55 @@ func (m *UsageLogMutation) ResetOutputDurationMs() {
 	delete(m.clearedFields, usagelog.FieldOutputDurationMs)
 }
 
+// SetRateObservation sets the "rate_observation" field.
+func (m *UsageLogMutation) SetRateObservation(r *ratemetric.Observation) {
+	m.rate_observation = &r
+}
+
+// RateObservation returns the value of the "rate_observation" field in the mutation.
+func (m *UsageLogMutation) RateObservation() (r *ratemetric.Observation, exists bool) {
+	v := m.rate_observation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRateObservation returns the old "rate_observation" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldRateObservation(ctx context.Context) (v *ratemetric.Observation, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRateObservation is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRateObservation requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRateObservation: %w", err)
+	}
+	return oldValue.RateObservation, nil
+}
+
+// ClearRateObservation clears the value of the "rate_observation" field.
+func (m *UsageLogMutation) ClearRateObservation() {
+	m.rate_observation = nil
+	m.clearedFields[usagelog.FieldRateObservation] = struct{}{}
+}
+
+// RateObservationCleared returns if the "rate_observation" field was cleared in this mutation.
+func (m *UsageLogMutation) RateObservationCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldRateObservation]
+	return ok
+}
+
+// ResetRateObservation resets all changes to the "rate_observation" field.
+func (m *UsageLogMutation) ResetRateObservation() {
+	m.rate_observation = nil
+	delete(m.clearedFields, usagelog.FieldRateObservation)
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (m *UsageLogMutation) SetFirstTokenMs(i int) {
 	m.first_token_ms = &i
@@ -52023,7 +52128,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 48)
+	fields := make([]string, 0, 49)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -52125,6 +52230,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.output_duration_ms != nil {
 		fields = append(fields, usagelog.FieldOutputDurationMs)
+	}
+	if m.rate_observation != nil {
+		fields = append(fields, usagelog.FieldRateObservation)
 	}
 	if m.first_token_ms != nil {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
@@ -52244,6 +52352,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.DurationMs()
 	case usagelog.FieldOutputDurationMs:
 		return m.OutputDurationMs()
+	case usagelog.FieldRateObservation:
+		return m.RateObservation()
 	case usagelog.FieldFirstTokenMs:
 		return m.FirstTokenMs()
 	case usagelog.FieldUserAgent:
@@ -52349,6 +52459,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldDurationMs(ctx)
 	case usagelog.FieldOutputDurationMs:
 		return m.OldOutputDurationMs(ctx)
+	case usagelog.FieldRateObservation:
+		return m.OldRateObservation(ctx)
 	case usagelog.FieldFirstTokenMs:
 		return m.OldFirstTokenMs(ctx)
 	case usagelog.FieldUserAgent:
@@ -52623,6 +52735,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOutputDurationMs(v)
+		return nil
+	case usagelog.FieldRateObservation:
+		v, ok := value.(*ratemetric.Observation)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRateObservation(v)
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		v, ok := value.(int)
@@ -53058,6 +53177,9 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldOutputDurationMs) {
 		fields = append(fields, usagelog.FieldOutputDurationMs)
 	}
+	if m.FieldCleared(usagelog.FieldRateObservation) {
+		fields = append(fields, usagelog.FieldRateObservation)
+	}
 	if m.FieldCleared(usagelog.FieldFirstTokenMs) {
 		fields = append(fields, usagelog.FieldFirstTokenMs)
 	}
@@ -53140,6 +53262,9 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldOutputDurationMs:
 		m.ClearOutputDurationMs()
+		return nil
+	case usagelog.FieldRateObservation:
+		m.ClearRateObservation()
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ClearFirstTokenMs()
@@ -53280,6 +53405,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldOutputDurationMs:
 		m.ResetOutputDurationMs()
+		return nil
+	case usagelog.FieldRateObservation:
+		m.ResetRateObservation()
 		return nil
 	case usagelog.FieldFirstTokenMs:
 		m.ResetFirstTokenMs()

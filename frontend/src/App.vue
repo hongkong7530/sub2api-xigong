@@ -57,7 +57,7 @@ watch(
     () => adminSettingsStore.customMenuItems,
   ],
   updateDocumentTitle,
-  { deep: true }
+  { deep: true, immediate: true }
 )
 
 // Watch for authentication state and manage subscription data + announcements

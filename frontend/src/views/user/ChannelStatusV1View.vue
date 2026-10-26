@@ -4,10 +4,12 @@
       :overall-status="overallStatus"
       :interval-seconds="DEFAULT_INTERVAL_SECONDS"
       :window="currentWindow"
+      :cache-window-seconds="cacheRateWindowSeconds"
       :loading="loading"
       :notice="appStore.cachedPublicSettings?.channel_status_notice"
       :auto-refresh="autoRefresh"
       @update:window="handleWindowChange"
+      @update:cache-window-seconds="handleCacheRateWindowChange"
       @refresh="refresh()"
     />
 
@@ -60,10 +62,12 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import {
+  DEFAULT_CACHE_RATE_WINDOW_SECONDS,
   list as listChannelMonitorViews,
   status as fetchChannelMonitorDetail,
   listSubscriptions as listMonitorSubscriptions,
   listSubmittedReports,
+  type CacheRateWindowSeconds,
   type UserMonitorView,
   type UserMonitorDetail,
   type MonitorSubscription,
@@ -88,6 +92,18 @@ const authStore = useAuthStore()
 const items = ref<UserMonitorView[]>([])
 const loading = ref(false)
 const currentWindow = ref<MonitorWindow>('7d')
+const CACHE_RATE_WINDOW_STORAGE_KEY = 'channel-status-cache-rate-window-seconds'
+const CACHE_RATE_WINDOW_OPTIONS: readonly CacheRateWindowSeconds[] = [1800, 3600, 21600, 86400]
+function loadCacheRateWindow(): CacheRateWindowSeconds {
+  try {
+    const saved = Number(localStorage.getItem(CACHE_RATE_WINDOW_STORAGE_KEY))
+    if (CACHE_RATE_WINDOW_OPTIONS.includes(saved as CacheRateWindowSeconds)) return saved as CacheRateWindowSeconds
+  } catch {
+    // Storage can be unavailable in restricted browsing contexts.
+  }
+  return DEFAULT_CACHE_RATE_WINDOW_SECONDS
+}
+const cacheRateWindowSeconds = ref<CacheRateWindowSeconds>(loadCacheRateWindow())
 const detailCache = reactive<Record<number, UserMonitorDetail>>({})
 const showDetail = ref(false)
 const detailTarget = ref<UserMonitorView | null>(null)
@@ -133,7 +149,7 @@ async function reload(silent = false) {
   abortController = ctrl
   if (!silent) loading.value = true
   try {
-    const res = await listChannelMonitorViews({ signal: ctrl.signal })
+    const res = await listChannelMonitorViews({ signal: ctrl.signal, cacheWindowSeconds: cacheRateWindowSeconds.value })
     if (ctrl.signal.aborted || abortController !== ctrl) return
     items.value = res.items || []
   } catch (err: unknown) {
@@ -231,6 +247,17 @@ async function ensureDetailsForWindow() {
 async function handleWindowChange(value: MonitorWindow) {
   currentWindow.value = value
   await ensureDetailsForWindow()
+}
+
+async function handleCacheRateWindowChange(value: CacheRateWindowSeconds) {
+  if (!CACHE_RATE_WINDOW_OPTIONS.includes(value)) return
+  cacheRateWindowSeconds.value = value
+  try {
+    localStorage.setItem(CACHE_RATE_WINDOW_STORAGE_KEY, String(value))
+  } catch {
+    // The current selection remains active for this page even without storage.
+  }
+  await reload(false)
 }
 
 function openDetail(row: UserMonitorView) {

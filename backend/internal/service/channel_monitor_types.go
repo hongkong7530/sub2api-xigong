@@ -47,6 +47,7 @@ type ChannelMonitor struct {
 	Description         string
 	DescriptionColor    string
 	Enabled             bool
+	ProbeMode           string // hybrid（主动+被动）或 passive（仅分组真实请求）
 	IntervalSeconds     int
 	JitterSeconds       int // 每次调度 ± [0, jitter] 的随机偏移（秒），0 = 固定间隔
 	LastCheckedAt       *time.Time
@@ -101,6 +102,7 @@ type ChannelMonitorCreateParams struct {
 	Description      string
 	DescriptionColor string
 	Enabled          bool
+	ProbeMode        string
 	IntervalSeconds  int
 	JitterSeconds    int
 	CreatedBy        int64
@@ -129,6 +131,7 @@ type ChannelMonitorUpdateParams struct {
 	Description      *string
 	DescriptionColor *string
 	Enabled          *bool
+	ProbeMode        *string
 	IntervalSeconds  *int
 	JitterSeconds    *int
 	// 自定义快照字段：指针为 nil 表示不更新，非 nil 覆盖
@@ -161,6 +164,7 @@ type CheckResult struct {
 }
 
 type ChannelMonitorGroupRatePoint struct {
+	IsInitial               bool      `json:"is_initial"`
 	RateMultiplier          float64   `json:"rate_multiplier"`
 	EffectiveRateMultiplier float64   `json:"effective_rate_multiplier"`
 	PeakRateEnabled         bool      `json:"peak_rate_enabled"`
@@ -248,6 +252,7 @@ type UserGroupInsight struct {
 
 // UserGroupRatePoint 倍率变更历史单点。
 type UserGroupRatePoint struct {
+	IsInitial               bool
 	RateMultiplier          float64
 	EffectiveRateMultiplier float64
 	RecordedAt              time.Time

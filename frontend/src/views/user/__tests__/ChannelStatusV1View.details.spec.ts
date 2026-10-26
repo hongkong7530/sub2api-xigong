@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, shallowMount } from '@vue/test-utils'
 import ChannelStatusV1View from '../ChannelStatusV1View.vue'
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), status: vi.fn(), listSubscriptions: vi.fn(), listSubmittedReports: vi.fn() }))
+const mocks = vi.hoisted(() => ({ DEFAULT_CACHE_RATE_WINDOW_SECONDS: 1800, list: vi.fn(), status: vi.fn(), listSubscriptions: vi.fn(), listSubmittedReports: vi.fn() }))
 vi.mock('@/api/channelMonitor', () => mocks)
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ cachedPublicSettings: { channel_monitor_enabled: true }, showError: vi.fn() }) }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAuthenticated: false, user: null }) }))

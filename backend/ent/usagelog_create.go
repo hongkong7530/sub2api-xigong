@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 )
 
 // UsageLogCreate is the builder for creating a UsageLog entity.
@@ -460,6 +461,12 @@ func (_c *UsageLogCreate) SetNillableOutputDurationMs(v *int) *UsageLogCreate {
 	if v != nil {
 		_c.SetOutputDurationMs(*v)
 	}
+	return _c
+}
+
+// SetRateObservation sets the "rate_observation" field.
+func (_c *UsageLogCreate) SetRateObservation(v *ratemetric.Observation) *UsageLogCreate {
+	_c.mutation.SetRateObservation(v)
 	return _c
 }
 
@@ -1096,6 +1103,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.OutputDurationMs(); ok {
 		_spec.SetField(usagelog.FieldOutputDurationMs, field.TypeInt, value)
 		_node.OutputDurationMs = &value
+	}
+	if value, ok := _c.mutation.RateObservation(); ok {
+		_spec.SetField(usagelog.FieldRateObservation, field.TypeJSON, value)
+		_node.RateObservation = value
 	}
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
@@ -1881,6 +1892,24 @@ func (u *UsageLogUpsert) AddOutputDurationMs(v int) *UsageLogUpsert {
 // ClearOutputDurationMs clears the value of the "output_duration_ms" field.
 func (u *UsageLogUpsert) ClearOutputDurationMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldOutputDurationMs)
+	return u
+}
+
+// SetRateObservation sets the "rate_observation" field.
+func (u *UsageLogUpsert) SetRateObservation(v *ratemetric.Observation) *UsageLogUpsert {
+	u.Set(usagelog.FieldRateObservation, v)
+	return u
+}
+
+// UpdateRateObservation sets the "rate_observation" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateRateObservation() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldRateObservation)
+	return u
+}
+
+// ClearRateObservation clears the value of the "rate_observation" field.
+func (u *UsageLogUpsert) ClearRateObservation() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldRateObservation)
 	return u
 }
 
@@ -2859,6 +2888,27 @@ func (u *UsageLogUpsertOne) UpdateOutputDurationMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearOutputDurationMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearOutputDurationMs()
+	})
+}
+
+// SetRateObservation sets the "rate_observation" field.
+func (u *UsageLogUpsertOne) SetRateObservation(v *ratemetric.Observation) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetRateObservation(v)
+	})
+}
+
+// UpdateRateObservation sets the "rate_observation" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateRateObservation() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateRateObservation()
+	})
+}
+
+// ClearRateObservation clears the value of the "rate_observation" field.
+func (u *UsageLogUpsertOne) ClearRateObservation() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearRateObservation()
 	})
 }
 
@@ -4043,6 +4093,27 @@ func (u *UsageLogUpsertBulk) UpdateOutputDurationMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearOutputDurationMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearOutputDurationMs()
+	})
+}
+
+// SetRateObservation sets the "rate_observation" field.
+func (u *UsageLogUpsertBulk) SetRateObservation(v *ratemetric.Observation) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetRateObservation(v)
+	})
+}
+
+// UpdateRateObservation sets the "rate_observation" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateRateObservation() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateRateObservation()
+	})
+}
+
+// ClearRateObservation clears the value of the "rate_observation" field.
+func (u *UsageLogUpsertBulk) ClearRateObservation() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearRateObservation()
 	})
 }
 

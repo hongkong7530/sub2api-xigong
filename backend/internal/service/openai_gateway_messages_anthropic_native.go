@@ -562,6 +562,7 @@ func (s *OpenAIGatewayService) nativeAnthropicStreamResult(
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
 		OutputDurationMs: observedStreamOutputDuration(c),
+		RateObservation:  observedStreamRateObservation(c),
 		ClientDisconnect: clientDisconnect,
 	}
 }

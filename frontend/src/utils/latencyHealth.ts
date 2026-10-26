@@ -71,7 +71,7 @@ export const LATENCY_BAR_TO_CLASSES: Record<LatencySeverity, string> = {
 }
 
 type UsageRateSample = Pick<UsageLog, 'output_tokens'> & Partial<Pick<UsageLog,
-  'duration_ms' | 'first_token_ms' | 'output_duration_ms' | 'image_count' | 'image_output_tokens' | 'billing_mode' | 'request_type'
+  'duration_ms' | 'first_token_ms' | 'output_duration_ms' | 'rate_observation' | 'image_count' | 'image_output_tokens' | 'billing_mode' | 'request_type'
 >>
 
 // 分母只用首个正式流事件至成功终态的观测区间，含推理；旧TTFT不能还原它。
@@ -89,6 +89,41 @@ export const formatUsageOutputRate = (row: UsageRateSample): string => {
   return rate == null ? '—' : `${rate.toFixed(1)} tok/s`
 }
 
-// 以未四舍五入的数值判断，200.0不触发，未知样本不高亮。
-export const isHighSpeedUsage = (row: UsageRateSample): boolean => (usageOutputRate(row) ?? 0) > 200
-export const isGoldenSpeedUsage = (row: UsageRateSample): boolean => (usageOutputRate(row) ?? 0) >= 300
+// 保留原始接收速率；质量标签和排行资格不因视觉强调而升级。
+export const usageRateQuality = (row: UsageRateSample): string => {
+  const o = row.rate_observation
+  if (!o || o.version !== 1) return 'unknown'
+  if (o.quality !== 'observed') return ['short_window', 'single_batch', 'concentrated', 'incomplete', 'timing_uncertain'].includes(o.quality) ? o.quality : 'unknown'
+  return o.window_ms != null && o.window_ms >= 1000 && o.window_ms === row.output_duration_ms
+    && o.output_events >= 3 && o.event_span_ms >= 250 && o.output_bytes > 0
+    && o.max_burst_bytes >= 0 && o.max_burst_bytes * 5 < o.output_bytes * 4 ? 'observed' : 'unknown'
+}
+
+// 只用独立入口/逐轮计时，不从旧 duration_ms 或首字回算全程。
+export const usageAverageThroughput = (row: UsageRateSample): number | null => {
+  const o = row.rate_observation
+  if (!o || o.version !== 1 || !['app_request', 'ws_turn'].includes(o.timing_scope ?? '')
+    || o.request_duration_ms == null || !Number.isFinite(o.request_duration_ms) || o.request_duration_ms <= 0
+    || !Number.isFinite(row.output_tokens) || row.output_tokens <= 0
+    || (row.image_count ?? 0) > 0 || (row.image_output_tokens ?? 0) > 0 || row.billing_mode === 'image') return null
+  return row.output_tokens * 1000 / o.request_duration_ms
+}
+export const formatUsageAverageThroughput = (row: UsageRateSample): string => {
+  const rate = usageAverageThroughput(row)
+  return rate == null ? '—' : rate.toFixed(1) + ' tok/s'
+}
+// 特效强调满足长窗口/分布约束的接收速率，不是模型内速度认证。
+// 消费端计时仍保留 timing_uncertain 标签，不为其放开后台排行。
+const usageHighlightRate = (row: UsageRateSample): number | null => {
+  const o = row.rate_observation
+  if (!o || o.version !== 1 || !['observed', 'timing_uncertain'].includes(o.quality)
+    || o.window_ms == null || !Number.isFinite(o.window_ms) || o.window_ms < 1000 || o.window_ms !== row.output_duration_ms
+    || !Number.isFinite(o.output_events) || o.output_events < 3
+    || !Number.isFinite(o.event_span_ms) || o.event_span_ms < 250
+    || !Number.isFinite(o.output_bytes) || o.output_bytes <= 0
+    || !Number.isFinite(o.max_burst_bytes) || o.max_burst_bytes < 0
+    || o.max_burst_bytes * 5 >= o.output_bytes * 4) return null
+  return usageOutputRate(row)
+}
+export const isHighSpeedUsage = (row: UsageRateSample): boolean => (usageHighlightRate(row) ?? 0) > 200
+export const isGoldenSpeedUsage = (row: UsageRateSample): boolean => (usageHighlightRate(row) ?? 0) >= 300

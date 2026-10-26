@@ -74,6 +74,7 @@ FROM (
  FROM usage_logs ul
  ` + join + `
  ` + where + `
+ ` + eligibleRateObservationSQL + `
  AND ul.output_tokens > 0 AND ul.output_duration_ms >= 100
  AND ul.image_count = 0 AND ul.image_output_tokens = 0
  AND COALESCE(ul.billing_mode, '') <> 'image'

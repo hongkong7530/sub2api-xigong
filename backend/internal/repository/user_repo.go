@@ -176,6 +176,16 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 	return nil
 }
 
+// GetBalance 只读取当前权威余额，不加载与余额预检无关的授权分组。
+// 沿用 User 查询的软删除可见性与错误语义，不使用鉴权快照或跨请求缓存。
+func (r *userRepository) GetBalance(ctx context.Context, id int64) (float64, error) {
+	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Select(dbuser.FieldBalance).Only(ctx)
+	if err != nil {
+		return 0, translatePersistenceError(err, service.ErrUserNotFound, nil)
+	}
+	return m.Balance, nil
+}
+
 func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, error) {
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)
 	if err != nil {

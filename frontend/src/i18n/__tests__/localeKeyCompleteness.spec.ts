@@ -83,6 +83,13 @@ describe('locale key completeness', () => {
     }
   })
 
+  it('distinguishes a sub-second output window from forwarder-side observation', () => {
+    expect(zh.usage.rateQuality.short_window).toBe('短窗口（不足1秒）')
+    expect(zh.usage.rateQuality.timing_uncertain).toBe('转发侧观测')
+    expect(en.usage.rateQuality.short_window).toBe('Short window (<1s)')
+    expect(en.usage.rateQuality.timing_uncertain).toBe('Forwarder observation')
+  })
+
   it('contains every statically referenced production key', () => {
     expect(missingKeys(usedKeys, enKeys), 'English locale is missing referenced keys').toEqual([])
     expect(missingKeys(usedKeys, zhKeys), 'Chinese locale is missing referenced keys').toEqual([])

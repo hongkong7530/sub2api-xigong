@@ -77,13 +77,14 @@ func TestNodeValidation(t *testing.T) {
 	require.Error(t, n.Validate())
 }
 func TestProxyManagedRenderingAndPreservation(t *testing.T) {
-	p := NewProxy(config.ClusterConfig{CAFile: "/etc/cluster/ca.pem", StateDir: "/var/lib/cluster"}, "/run/haproxy/admin.sock", "workers")
+	p := NewProxy(config.ClusterConfig{CAFile: "/etc/cluster/ca.pem", StateDir: "/var/lib/cluster", QueueTimeoutMS: 1000}, "/run/haproxy/admin.sock", "workers")
 	original := "global\n    maxconn 1000\n" + managedBegin + "\nold\n" + managedEnd + "\nbackend database\n    mode tcp\n"
 	out, err := p.Render(original, []Node{fixtureNode()})
 	require.NoError(t, err)
 	require.Contains(t, out, "backend database\n    mode tcp")
 	require.Contains(t, out, "verify required verifyhost node-1")
 	require.Contains(t, out, "weight 8 maxconn 4")
+	require.Contains(t, out, "timeout queue 1000ms")
 	n := fixtureNode()
 	n.State = "paused"
 	out, err = p.Render(original, []Node{n})

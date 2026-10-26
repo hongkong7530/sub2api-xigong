@@ -178,11 +178,11 @@ func TestGroupAutomationAutoChannelReconcilesIdempotently(t *testing.T) {
 }
 
 func TestGroupAutomationRejectsConcurrentInvocationBeforeScanning(t *testing.T) {
-	groups := &automationGroupRepoStub{}
-	monitors := NewChannelMonitorService(&automationMonitorRepoStub{}, &duplicateChannelMonitorEncryptor{})
+	groups := &automationGroupRepoStub{groups: []Group{*automationTestGroup()}}
+	monitors := NewChannelMonitorService(&automationMonitorRepoStub{bound: []int64{23}}, &duplicateChannelMonitorEncryptor{})
 	svc := NewGroupAutomationService(groups, nil, monitors, nil)
 	svc.provisionMu.Lock()
-	_, err := svc.AutoProvisionPublicGroups(context.Background(), 1)
+	_, err := svc.AutoProvisionPublicGroups(context.Background(), 1, GroupAutomationSelection{GroupID: 23, ProbeMode: MonitorProbeModeHybrid, IntervalSeconds: 60})
 	svc.provisionMu.Unlock()
 	require.Error(t, err)
 	require.Zero(t, groups.scans)
@@ -190,11 +190,11 @@ func TestGroupAutomationRejectsConcurrentInvocationBeforeScanning(t *testing.T) 
 	_, err = locks.TryAcquireLeaderLock(context.Background(), autoPlazaReconcileLockKey, "peer", time.Minute)
 	require.NoError(t, err)
 	svc.SetLeaderLock(locks, nil)
-	_, err = svc.AutoProvisionPublicGroups(context.Background(), 1)
+	_, err = svc.AutoProvisionPublicGroups(context.Background(), 1, GroupAutomationSelection{GroupID: 23, ProbeMode: MonitorProbeModeHybrid, IntervalSeconds: 60})
 	require.Error(t, err)
 	require.Zero(t, groups.scans)
 	require.NoError(t, locks.ReleaseLeaderLock(context.Background(), autoPlazaReconcileLockKey, "peer"))
-	_, err = svc.AutoProvisionPublicGroups(context.Background(), 1)
+	_, err = svc.AutoProvisionPublicGroups(context.Background(), 1, GroupAutomationSelection{GroupID: 23, ProbeMode: MonitorProbeModeHybrid, IntervalSeconds: 60})
 	require.NoError(t, err)
 	require.Equal(t, 1, groups.scans)
 }
@@ -205,7 +205,7 @@ func TestGroupAutomationCancellationStopsBeforeMutatingGroups(t *testing.T) {
 	svc := NewGroupAutomationService(groups, nil, monitors, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := svc.AutoProvisionPublicGroups(ctx, 1)
+	_, err := svc.AutoProvisionPublicGroups(ctx, 1, GroupAutomationSelection{GroupID: 23, ProbeMode: MonitorProbeModeHybrid, IntervalSeconds: 60})
 	require.ErrorIs(t, err, context.Canceled)
 }
 

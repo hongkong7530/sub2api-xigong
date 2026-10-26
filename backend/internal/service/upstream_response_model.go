@@ -192,6 +192,8 @@ func (o *upstreamResponseModelObserver) Conflict() bool {
 
 func beginUpstreamResponseModelObservation(c *gin.Context) *upstreamResponseModelObserver {
 	observer := &upstreamResponseModelObserver{}
+	// Forwarding consumption can be paced by downstream writes; do not certify socket arrival distribution.
+	observer.outputWindow.arrivals.MarkTimingUncertain()
 	if c != nil {
 		c.Set(upstreamResponseModelObserverContextKey, observer)
 	}

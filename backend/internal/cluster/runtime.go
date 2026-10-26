@@ -51,8 +51,10 @@ type Runtime struct {
 	trafficBootID         string
 	// mismatch explains why this node is withheld from admission, so a silent version,
 	// role or capability drift cannot masquerade as an ordinary 503.
-	mismatch     string
-	lastMismatch string
+	mismatch         string
+	lastMismatch     string
+	lastProxyError   string
+	proxyObservation *ProxyObservation
 }
 
 // NewRuntime validates TLS material without opening listeners or changing membership.
@@ -93,7 +95,7 @@ func NewRuntime(cfg *config.Config, db *sql.DB, rdb *redis.Client) (*Runtime, er
 	h := sha256.Sum256(cert.Certificate[0])
 	r.certificate = hex.EncodeToString(h[:])
 	r.tlsConfig = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}, ClientCAs: pool, RootCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert}
-	if cfg.RunsRole(config.RoleController) {
+	if cfg.RunsRole(config.RoleController) || cfg.RunsRole(config.RoleIngress) {
 		r.proxy = NewProxy(cfg.Cluster, cfg.Cluster.HAProxyRuntimeSocket, cfg.Cluster.ClusterBackendName)
 	}
 	return r, nil
@@ -297,6 +299,7 @@ func (r *Runtime) sample(parent context.Context) {
 	r.mu.RLock()
 	node := r.local
 	last := r.lastConfig
+	proxyObservation := r.proxyObservation
 	r.mu.RUnlock()
 	if node == nil || now.Sub(last) >= 5*time.Second {
 		n, err := r.Store.Authenticate(ctx, r.cfg.Cluster.NodeID, r.certificate)
@@ -360,7 +363,12 @@ func (r *Runtime) sample(parent context.Context) {
 		dbOK = false
 	}
 	a, w, p := r.Gate.Counts()
-	ready := !r.stopping.Load() && node != nil && node.State == "ready" && dbOK && redisOK && p < max(128, r.cfg.Cluster.MaxInFlight*4) && now.Sub(last) < 15*time.Second
+	recoveryCapacity := max(128, r.cfg.Cluster.MaxInFlight*4)
+	if node != nil {
+		recoveryCapacity = max(128, node.MaxInFlight*4)
+	}
+	reserveReady, reserveErr := r.reserve.ConfigureCapacity(recoveryCapacity)
+	ready := !r.stopping.Load() && node != nil && node.State == "ready" && dbOK && redisOK && reserveErr == nil && reserveReady && p < recoveryCapacity && now.Sub(last) < 15*time.Second
 	if node != nil {
 		r.Gate.Configure(ready, node.MaxInFlight, node.MaxQueue)
 		r.db.SetMaxOpenConns(node.DBConnections)
@@ -368,14 +376,13 @@ func (r *Runtime) sample(parent context.Context) {
 	} else {
 		r.Gate.Configure(false, r.cfg.Cluster.MaxInFlight, r.cfg.Cluster.MaxQueue)
 	}
-	snapshot := Snapshot{NodeID: r.cfg.Cluster.NodeID, BootID: r.bootID, At: now, Active: a, Waiting: w, PendingSettlement: p, DBOK: dbOK, RedisOK: redisOK, AdmissionReady: ready, DBConnections: r.db.Stats().InUse, QueueWaitMS: r.Gate.QueueWaitMS(), AdmissionBlockedBy: r.mismatch}
+	snapshot := Snapshot{NodeID: r.cfg.Cluster.NodeID, BootID: r.bootID, At: now, Active: a, Waiting: w, PendingSettlement: p, DBOK: dbOK, RedisOK: redisOK, AdmissionReady: ready, QueueWaitMS: r.Gate.QueueWaitMS(), AdmissionBlockedBy: r.mismatch}
 	if node != nil {
 		snapshot.ObservedRevision = node.Revision
 		snapshot.Version = r.cfg.Cluster.ApplicationVersion
 	}
-	dbStats := r.db.Stats()
-	snapshot.DBPoolMax = &dbStats.MaxOpenConnections
-	snapshot.DBPoolIdle = &dbStats.Idle
+	snapshot.setDBPoolStats(r.db.Stats())
+	snapshot.Proxy = proxyObservation
 	if r.redis != nil {
 		pool := r.redis.PoolStats()
 		limit, total, idle := r.redis.Options().PoolSize, int(pool.TotalConns), int(pool.IdleConns)
@@ -415,6 +422,16 @@ func (r *Runtime) sample(parent context.Context) {
 		}
 	}
 }
+func (s *Snapshot) setDBPoolStats(stats sql.DBStats) {
+	s.DBConnections = stats.InUse
+	s.DBPoolMax = &stats.MaxOpenConnections
+	s.DBPoolIdle = &stats.Idle
+	s.DBPoolOpen = &stats.OpenConnections
+	s.DBPoolWaitCount = &stats.WaitCount
+	waitMS := stats.WaitDuration.Milliseconds()
+	s.DBPoolWaitMS = &waitMS
+}
+
 func (r *Runtime) peer(req *http.Request) (string, string, error) {
 	if req.TLS == nil || len(req.TLS.VerifiedChains) == 0 || len(req.TLS.PeerCertificates) == 0 {
 		return "", "", ErrForbidden

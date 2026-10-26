@@ -39,17 +39,7 @@
         </div>
       </div>
 
-      <div class="mt-3 rounded-xl border border-gray-100 bg-gray-50/70 p-2 dark:border-dark-700 dark:bg-dark-900/40">
-        <div class="mb-2 flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300">
-          <span>{{ t('admin.channelMonitor.groupInsight.rateHistory') }}</span>
-          <span>{{ history.length ? t('admin.channelMonitor.groupInsight.samples', { count: history.length }) : t('admin.channelMonitor.groupInsight.noSamples') }}</span>
-        </div>
-        <svg v-if="polyline" viewBox="0 0 320 76" class="h-16 w-full text-sky-500" role="img" :aria-label="t('admin.channelMonitor.groupInsight.rateCurveAria')">
-          <path d="M0 68H320" stroke="currentColor" stroke-opacity=".12" stroke-width="1" class="text-gray-500" />
-          <polyline :points="polyline" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" />
-        </svg>
-        <p v-else class="flex h-16 items-center justify-center text-xs text-gray-400">{{ t('admin.channelMonitor.groupInsight.waitingHistory') }}</p>
-      </div>
+      <MonitorRateHistory :history="history" :current-rate="metrics.rate_multiplier" />
 
       <div class="mt-3 rounded-xl border border-gray-100 bg-gray-50/70 p-2 dark:border-dark-700 dark:bg-dark-900/40">
         <div class="mb-2 flex items-center justify-between text-xs font-medium text-gray-600 dark:text-gray-300">
@@ -109,11 +99,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { GroupFirstTokenItem, GroupMonitorMetrics, GroupRateHistoryItem, GroupReportItem } from '@/api/admin/channelMonitor'
 import Icon from '@/components/icons/Icon.vue'
+import MonitorRateHistory from '@/components/user/monitor/MonitorRateHistory.vue'
 
 const { t } = useI18n()
 const props = defineProps<{ groupId: number; groupName: string }>()
@@ -126,18 +117,6 @@ const loading = ref(false)
 const error = ref('')
 let timer: ReturnType<typeof setInterval> | null = null
 
-const polyline = computed(() => {
-  if (history.value.length < 2) return ''
-  const values = history.value.slice().reverse().map((point) => point.effective_rate_multiplier)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = Math.max(max - min, 0.0001)
-  return values.map((value, index) => {
-    const x = (index / (values.length - 1)) * 320
-    const y = 68 - ((value - min) / span) * 56
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-})
 
 function compact(value: number): string {
   return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)

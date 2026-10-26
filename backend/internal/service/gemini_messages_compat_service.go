@@ -529,7 +529,8 @@ func (s *GeminiMessagesCompatService) HasAntigravityAccounts(ctx context.Context
 	return len(accounts) > 0, nil
 }
 
-func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (rateResult *ForwardResult, rateErr error) {
+	defer func() { finishGatewayRateObservation(observationContext(c, ctx), rateResult, rateErr) }()
 	beginUpstreamResponseModelObservation(c)
 	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
@@ -554,6 +555,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body)
 	if err != nil {
 		return nil, s.writeClaudeError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+	}
+	if geminiImageGenerationDenied(c, geminiReq, originalModel, mappedModel) {
+		return nil, s.writeClaudeError(c, http.StatusBadRequest, "invalid_request_error", ImageGenerationPermissionMessage())
 	}
 	geminiReq = ensureGeminiFunctionCallThoughtSignatures(geminiReq)
 	includeThoughts := req.Stream && claudeRequestEnablesThinking(body)
@@ -1015,6 +1019,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	clientDisconnect := false
+	streamFinished := false
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, originalModel)
 		if err != nil {
@@ -1022,6 +1028,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		clientDisconnect = streamRes.clientDisconnect
+		streamFinished = streamRes.finished
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
@@ -1049,6 +1057,10 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
 	imageCount := resolveGeminiImageCount(c, originalModel, mappedModel)
+	// 客户端在收到结束分片前断开时只计已送达的图片：Claude 兼容流不向客户端转发图片。
+	if clientDisconnect && !streamFinished {
+		imageCount = 0
+	}
 
 	return &ForwardResult{
 		RequestID:                     requestID,
@@ -1058,11 +1070,13 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		UpstreamModel:                 mappedModel,
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		OutputDurationMs:              observedStreamOutputDuration(c),
+		RateObservation:               observedStreamRateObservation(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		Stream:                        req.Stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
 		ReasoningEffort:               extractGeminiReasoningEffortFromBody(geminiReq),
+		ClientDisconnect:              clientDisconnect,
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
@@ -1077,7 +1091,8 @@ func isGeminiSignatureRelatedError(respBody []byte) bool {
 	return strings.Contains(msg, "thought_signature") || strings.Contains(msg, "signature")
 }
 
-func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte) (*ForwardResult, error) {
+func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte) (rateResult *ForwardResult, rateErr error) {
+	defer func() { finishGatewayRateObservation(observationContext(c, ctx), rateResult, rateErr) }()
 	beginUpstreamResponseModelObservation(c)
 	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
@@ -1111,6 +1126,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	mappedModel := originalModel
 	if account.Type == AccountTypeAPIKey || account.Type == AccountTypeServiceAccount {
 		mappedModel = account.GetMappedModel(originalModel)
+	}
+	if action != "countTokens" && geminiImageGenerationDenied(c, body, originalModel, mappedModel) {
+		return nil, s.writeGoogleError(c, http.StatusBadRequest, ImageGenerationPermissionMessage())
 	}
 
 	proxyURL := ""
@@ -1531,6 +1549,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	clientDisconnect := false
+	streamFinished := false
 
 	if stream {
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth, account, requestID)
@@ -1539,6 +1559,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		clientDisconnect = streamRes.clientDisconnect
+		streamFinished = streamRes.finished
 	} else {
 		if useUpstreamStream {
 			var best geminiResponseSignal
@@ -1573,6 +1595,10 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
 	imageCount := resolveGeminiImageCount(c, originalModel, mappedModel)
+	// 客户端在收到结束分片前断开时只计已送达的图片。
+	if clientDisconnect && !streamFinished {
+		imageCount = observedGeminiImageOutputs(c)
+	}
 
 	return &ForwardResult{
 		RequestID:                     requestID,
@@ -1582,11 +1608,13 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		UpstreamModel:                 mappedModel,
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		OutputDurationMs:              observedStreamOutputDuration(c),
+		RateObservation:               observedStreamRateObservation(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		Stream:                        stream,
 		ReasoningEffort:               extractGeminiReasoningEffortFromBody(body),
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		ClientDisconnect:              clientDisconnect,
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
@@ -2070,8 +2098,10 @@ func mapGeminiStatusToClaudeErrorType(status string) string {
 }
 
 type geminiStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	clientDisconnect bool // 客户端在流式传输中途断开，结果为断开前已收集的部分
+	finished         bool // 断开前已收到上游 finishReason
 }
 
 func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context, resp *http.Response, originalModel string) (*ClaudeUsage, error) {
@@ -2153,6 +2183,15 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
+			if geminiStreamAbortedWithBillableOutput(c, err, &usage) {
+				logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Client disconnected during messages stream, billing collected usage: %v", err)
+				return &geminiStreamResult{
+					usage:            &usage,
+					firstTokenMs:     firstTokenMs,
+					clientDisconnect: true,
+					finished:         finishReason != "",
+				}, nil
+			}
 			return nil, fmt.Errorf("stream read error: %w", err)
 		}
 
@@ -2662,8 +2701,10 @@ func mergeCollectedTextParts(response map[string]any, textParts []string) map[st
 }
 
 type geminiNativeStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	clientDisconnect bool // 客户端在流式传输中途断开，结果为断开前已收集的部分
+	finished         bool // 断开前已收到上游 finishReason
 }
 
 func isGeminiInsufficientScope(headers http.Header, body []byte) bool {
@@ -2840,10 +2881,13 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	var best geminiResponseSignal
 	sawDataEvent := false
 	fallback := &geminiSSEFallbackBody{}
+	clientDisconnect := false
+	finished := false
 
 	for {
 		line, err := reader.ReadString('\n')
-		if len(line) > 0 {
+		// 读错误时 line 是未以换行结尾的残行，不透传也不参与用量统计；EOF 时的末行完整有效。
+		if len(line) > 0 && (err == nil || errors.Is(err, io.EOF)) {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
@@ -2876,6 +2920,10 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 					observer.ObserveGemini(rawBytes)
 					observeGeminiImageOutputs(c, rawBytes)
 
+					if gjson.GetBytes(rawBytes, "candidates.0.finishReason").String() != "" {
+						finished = true
+					}
+
 					if firstTokenMs == nil {
 						ms := int(time.Since(startTime).Milliseconds())
 						firstTokenMs = &ms
@@ -2903,13 +2951,18 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			break
 		}
 		if err != nil {
-			return nil, err
+			if !geminiStreamAbortedWithBillableOutput(c, err, usage) {
+				return nil, err
+			}
+			clientDisconnect = true
+			logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Client disconnected during native stream (account=%d), billing collected usage: %v", account.ID, err)
+			break
 		}
 	}
 
 	s.finalizeGeminiSSESignal(c, account, true, upstreamRequestID, best, sawDataEvent, fallback)
 
-	return &geminiNativeStreamResult{usage: usage, firstTokenMs: firstTokenMs}, nil
+	return &geminiNativeStreamResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnect, finished: finished}, nil
 }
 
 // unwrapGeminiResponse 解包 Gemini OAuth 响应中的 response 字段
@@ -3038,9 +3091,10 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 	}
 
 	// 注意：Gemini 的 promptTokenCount 包含 cachedContentTokenCount，
-	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去
+	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去。
+	// prompt 被拦截时上游可能只报 cachedContentTokenCount，差值下限为 0。
 	return &ClaudeUsage{
-		InputTokens:          prompt - cached,
+		InputTokens:          max(prompt-cached, 0),
 		OutputTokens:         cand + thoughts,
 		CacheReadInputTokens: cached,
 		ImageOutputTokens:    imageTokens,
@@ -3767,12 +3821,24 @@ func isClaudeWebSearchToolMap(tool map[string]any) bool {
 
 // cleanToolSchema 清理工具的 JSON Schema，移除 Gemini 不支持的字段
 func cleanToolSchema(schema any) any {
+	return cleanToolSchemaNode(schema, true)
+}
+
+func cleanToolSchemaNode(schema any, schemaNode bool) any {
 	if schema == nil {
 		return nil
 	}
 
 	switch v := schema.(type) {
 	case map[string]any:
+		if !schemaNode {
+			cleaned := make(map[string]any, len(v))
+			for key, value := range v {
+				cleaned[key] = cleanToolSchemaNode(value, false)
+			}
+			return cleaned
+		}
+
 		cleaned := make(map[string]any)
 		for key, value := range v {
 			// 跳过不支持的字段
@@ -3780,11 +3846,73 @@ func cleanToolSchema(schema any) any {
 				key == "$defs" || key == "definitions" ||
 				key == "additionalProperties" || key == "patternProperties" || key == "minLength" ||
 				key == "maxLength" || key == "minItems" || key == "maxItems" || key == "exclusiveMinimum" ||
-				key == "deprecated" {
+				key == "deprecated" || key == "examples" {
 				continue
 			}
-			// 递归清理嵌套对象
-			cleaned[key] = cleanToolSchema(value)
+
+			switch key {
+			case "properties", "dependentSchemas":
+				if propertySchemas, ok := value.(map[string]any); ok {
+					cleanedProperties := make(map[string]any, len(propertySchemas))
+					for propertyName, propertySchema := range propertySchemas {
+						cleanedProperties[propertyName] = cleanToolSchemaNode(propertySchema, true)
+					}
+					cleaned[key] = cleanedProperties
+				} else {
+					cleaned[key] = cleanToolSchemaNode(value, false)
+				}
+			case "items", "contains", "propertyNames", "if", "then", "else", "not", "contentSchema",
+				"additionalItems", "unevaluatedItems", "unevaluatedProperties":
+				cleaned[key] = cleanToolSchemaNode(value, true)
+			case "dependencies":
+				if dependencies, ok := value.(map[string]any); ok {
+					cleanedDependencies := make(map[string]any, len(dependencies))
+					for propertyName, dependency := range dependencies {
+						if dependencySchema, ok := dependency.(map[string]any); ok {
+							cleanedDependencies[propertyName] = cleanToolSchemaNode(dependencySchema, true)
+						} else {
+							cleanedDependencies[propertyName] = cleanToolSchemaNode(dependency, false)
+						}
+					}
+					cleaned[key] = cleanedDependencies
+				} else {
+					cleaned[key] = cleanToolSchemaNode(value, false)
+				}
+			case "anyOf", "allOf", "oneOf", "prefixItems":
+				if schemas, ok := value.([]any); ok {
+					cleanedSchemas := make([]any, len(schemas))
+					for i, childSchema := range schemas {
+						cleanedSchemas[i] = cleanToolSchemaNode(childSchema, true)
+					}
+					cleaned[key] = cleanedSchemas
+				} else {
+					cleaned[key] = cleanToolSchemaNode(value, false)
+				}
+			default:
+				cleaned[key] = cleanToolSchemaNode(value, false)
+			}
+		}
+		if constValue, exists := v["const"]; exists {
+			if stringValue, ok := constValue.(string); ok {
+				if originalEnum, hasEnum := v["enum"].([]any); hasEnum {
+					intersection := make([]any, 0, 1)
+					for _, value := range originalEnum {
+						if enumString, ok := value.(string); ok && enumString == stringValue {
+							intersection = append(intersection, stringValue)
+							break
+						}
+					}
+					cleaned["enum"] = intersection
+				} else {
+					cleaned["enum"] = []any{stringValue}
+				}
+				if _, hasType := cleaned["type"]; !hasType {
+					cleaned["type"] = "STRING"
+				}
+			}
+			// Non-string constants are unsupported: omit the constant, retain the
+			// original type, and do not stringify the constant or infer a type.
+			delete(cleaned, "const")
 		}
 		if enum, ok := cleaned["enum"].([]any); ok {
 			if normalized, ok := normalizeGeminiEnum(enum); ok {
@@ -3819,7 +3947,7 @@ func cleanToolSchema(schema any) any {
 	case []any:
 		cleaned := make([]any, len(v))
 		for i, item := range v {
-			cleaned[i] = cleanToolSchema(item)
+			cleaned[i] = cleanToolSchemaNode(item, schemaNode)
 		}
 		return cleaned
 	default:

@@ -173,14 +173,22 @@ func (h *SiteContentHandler) SiteStats(c *gin.Context) {
 	if h.runtime != nil && h.runtime.Enabled() {
 		nodes, e := h.runtime.Store.Nodes(ctx)
 		if e == nil {
-			total, complete, workers := 0, true, 0
+			ids := make([]string, 0, len(nodes))
+			for _, n := range nodes {
+				if slices.Contains(n.Roles, "worker") && n.State != "retired" && n.State != "pending" {
+					ids = append(ids, n.ID)
+				}
+			}
+			// 同一刷新只做一次跨节点观测读取，缺失或过期仍显示未知。
+			snapshots, snapshotErr := h.runtime.Snapshots(ctx, ids)
+			total, complete, workers := 0, snapshotErr == nil, 0
 			for _, n := range nodes {
 				if !slices.Contains(n.Roles, "worker") || n.State == "retired" || n.State == "pending" {
 					continue
 				}
 				workers++
-				snap, e := h.runtime.Snapshot(ctx, n.ID)
-				if e != nil || snap == nil || snap.NodeID != n.ID || !snap.Fresh(now) || snap.Active < 0 {
+				snap := snapshots[n.ID]
+				if snapshotErr != nil || snap == nil || snap.NodeID != n.ID || !snap.Fresh(now) || snap.Active < 0 {
 					complete = false
 					continue
 				}

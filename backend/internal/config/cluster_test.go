@@ -38,6 +38,26 @@ func TestClusterRolesDefaultAndStrict(t *testing.T) {
 	c.Roles = []string{RoleMigrator}
 	require.NoError(t, c.Validate())
 }
+func TestActiveIngressRequiresExplicitLocalProxyConfiguration(t *testing.T) {
+	c := validClusterConfig()
+	c.StateDir = t.TempDir()
+	c.Roles = []string{RoleIngress, RoleWorker}
+	require.NoError(t, c.Validate(), "shadow ingress must remain read-only without proxy paths")
+	c.Shadow = false
+	require.ErrorContains(t, c.Validate(), "active ingress or controller")
+	c.HAProxyConfig = filepath.Join(t.TempDir(), "haproxy.cfg")
+	c.HAProxyBinary = "/usr/sbin/haproxy"
+	c.HAProxyService = "haproxy"
+	c.HAProxyRuntimeSocket = filepath.Join(t.TempDir(), "admin.sock")
+	c.ClusterBackendName = "sub2api_nodes"
+	require.NoError(t, c.Validate())
+	require.False(t, (&Config{Cluster: c}).RunsRole(RoleController), "local proxy ownership must not grant control authority")
+	c.HAProxyRuntimeSocket = ""
+	require.Error(t, c.Validate())
+	c.Roles = []string{RoleWorker}
+	require.NoError(t, c.Validate(), "a pure worker does not manage a proxy")
+}
+
 func TestClusterConfigurationRejectsUnsafeBoundaries(t *testing.T) {
 	for _, mutate := range []func(*ClusterConfig){
 		func(c *ClusterConfig) { c.NodeID = "unknown/other" },

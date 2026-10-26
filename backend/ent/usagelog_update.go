@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 )
 
 // UsageLogUpdate is the builder for updating UsageLog entities.
@@ -712,6 +713,18 @@ func (_u *UsageLogUpdate) ClearOutputDurationMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetRateObservation sets the "rate_observation" field.
+func (_u *UsageLogUpdate) SetRateObservation(v *ratemetric.Observation) *UsageLogUpdate {
+	_u.mutation.SetRateObservation(v)
+	return _u
+}
+
+// ClearRateObservation clears the value of the "rate_observation" field.
+func (_u *UsageLogUpdate) ClearRateObservation() *UsageLogUpdate {
+	_u.mutation.ClearRateObservation()
+	return _u
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_u *UsageLogUpdate) SetFirstTokenMs(v int) *UsageLogUpdate {
 	_u.mutation.ResetFirstTokenMs()
@@ -1335,6 +1348,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.OutputDurationMsCleared() {
 		_spec.ClearField(usagelog.FieldOutputDurationMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.RateObservation(); ok {
+		_spec.SetField(usagelog.FieldRateObservation, field.TypeJSON, value)
+	}
+	if _u.mutation.RateObservationCleared() {
+		_spec.ClearField(usagelog.FieldRateObservation, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
@@ -2262,6 +2281,18 @@ func (_u *UsageLogUpdateOne) ClearOutputDurationMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetRateObservation sets the "rate_observation" field.
+func (_u *UsageLogUpdateOne) SetRateObservation(v *ratemetric.Observation) *UsageLogUpdateOne {
+	_u.mutation.SetRateObservation(v)
+	return _u
+}
+
+// ClearRateObservation clears the value of the "rate_observation" field.
+func (_u *UsageLogUpdateOne) ClearRateObservation() *UsageLogUpdateOne {
+	_u.mutation.ClearRateObservation()
+	return _u
+}
+
 // SetFirstTokenMs sets the "first_token_ms" field.
 func (_u *UsageLogUpdateOne) SetFirstTokenMs(v int) *UsageLogUpdateOne {
 	_u.mutation.ResetFirstTokenMs()
@@ -2915,6 +2946,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.OutputDurationMsCleared() {
 		_spec.ClearField(usagelog.FieldOutputDurationMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.RateObservation(); ok {
+		_spec.SetField(usagelog.FieldRateObservation, field.TypeJSON, value)
+	}
+	if _u.mutation.RateObservationCleared() {
+		_spec.ClearField(usagelog.FieldRateObservation, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)

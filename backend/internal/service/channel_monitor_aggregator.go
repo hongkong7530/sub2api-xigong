@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // 渠道监控聚合层：把 latest + availability 拼成 admin/user 视图所需的 summary / detail。
@@ -56,7 +59,31 @@ func (s *ChannelMonitorService) BatchMonitorStatusSummary(
 //	1 次批量 latest（含 ping_latency_ms）；
 //	1 次批量 7d availability；
 //	1 次批量 timeline（主模型最近 N 条）。
+const DefaultCacheRateWindow = 30 * time.Minute
+
+var cacheRateWindows = [...]time.Duration{
+	30 * time.Minute,
+	time.Hour,
+	6 * time.Hour,
+	24 * time.Hour,
+}
+
+func normalizeCacheRateWindow(window time.Duration) time.Duration {
+	for _, allowed := range cacheRateWindows {
+		if window == allowed {
+			return window
+		}
+	}
+	return DefaultCacheRateWindow
+}
+
 func (s *ChannelMonitorService) ListUserView(ctx context.Context) ([]*UserMonitorView, error) {
+	return s.ListUserViewWithCacheRateWindow(ctx, DefaultCacheRateWindow)
+}
+
+// ListUserViewWithCacheRateWindow returns the user's channel cards with the selected cache-rate window.
+func (s *ChannelMonitorService) ListUserViewWithCacheRateWindow(ctx context.Context, cacheWindow time.Duration) ([]*UserMonitorView, error) {
+	cacheWindow = normalizeCacheRateWindow(cacheWindow)
 	monitors, err := s.repo.ListEnabled(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled monitors: %w", err)
@@ -66,14 +93,46 @@ func (s *ChannelMonitorService) ListUserView(ctx context.Context) ([]*UserMonito
 	}
 
 	ids, primaryByID, extrasByID := collectMonitorIndexes(monitors)
-	summaries := s.BatchMonitorStatusSummary(ctx, ids, primaryByID, extrasByID)
-	latestMap := s.batchLatest(ctx, ids)
-	timelineMap := s.batchTimeline(ctx, ids, primaryByID)
-
-	insightByGroup := s.groupInsightsFor(ctx, monitors)
-	health, healthErr := s.readHybridHealth(ctx, monitors, 7, monitorTimelineMaxPoints)
-	if healthErr != nil {
-		return nil, healthErr
+	var latestMap map[int64][]*ChannelMonitorLatest
+	var availMap map[int64][]*ChannelMonitorAvailability
+	var timelineMap map[int64][]*ChannelMonitorHistoryEntry
+	var insightByGroup map[int64]*UserGroupInsight
+	var health map[int64]*ChannelMonitorHealth
+	// 独立批量读取共享原请求生命周期，但不串行累加跨区数据库往返。
+	// 探针汇总仍供附加模型使用，不能因分组主状态被覆盖就省略它。
+	var reads errgroup.Group
+	reads.Go(func() error {
+		latestMap = s.batchLatest(ctx, ids)
+		return nil
+	})
+	reads.Go(func() error {
+		var err error
+		availMap, err = s.repo.ComputeAvailabilityForMonitors(ctx, ids, monitorAvailability7Days)
+		if err != nil {
+			slog.Warn("channel_monitor: batch compute availability failed", "error", err)
+			availMap = map[int64][]*ChannelMonitorAvailability{}
+		}
+		return nil
+	})
+	reads.Go(func() error {
+		timelineMap = s.batchTimeline(ctx, ids, primaryByID)
+		return nil
+	})
+	reads.Go(func() error {
+		insightByGroup = s.groupInsightsFor(ctx, monitors, cacheWindow)
+		return nil
+	})
+	reads.Go(func() error {
+		var err error
+		health, err = s.readHybridHealth(ctx, monitors, 7, monitorTimelineMaxPoints)
+		return err
+	})
+	if err := reads.Wait(); err != nil {
+		return nil, err
+	}
+	summaries := make(map[int64]MonitorStatusSummary, len(ids))
+	for _, id := range ids {
+		summaries[id] = buildStatusSummary(indexLatestByModel(latestMap[id]), indexAvailabilityByModel(availMap[id]), primaryByID[id], extrasByID[id])
 	}
 
 	views := make([]*UserMonitorView, 0, len(monitors))
@@ -99,35 +158,62 @@ func (s *ChannelMonitorService) ListUserView(ctx context.Context) ([]*UserMonito
 // 又能挡住多用户同秒并发下的重复聚合查询。
 const userGroupInsightTTL = 20 * time.Second
 
+type groupInsightCacheKey struct {
+	groupID       int64
+	windowSeconds int64
+}
+
 type groupInsightCacheEntry struct {
 	insight   *UserGroupInsight
 	expiresAt time.Time
 }
 
 // groupInsightsFor 为列表中出现的每个分组取一次实时指标；失败降级为 nil，不阻断列表。
-func (s *ChannelMonitorService) groupInsightsFor(ctx context.Context, monitors []*ChannelMonitor) map[int64]*UserGroupInsight {
+func (s *ChannelMonitorService) groupInsightsFor(ctx context.Context, monitors []*ChannelMonitor, cacheWindow time.Duration) map[int64]*UserGroupInsight {
 	out := make(map[int64]*UserGroupInsight)
 	for _, m := range monitors {
-		if m.GroupID == nil {
-			continue
+		if m.GroupID != nil {
+			out[*m.GroupID] = nil
 		}
-		gid := *m.GroupID
-		if _, ok := out[gid]; ok {
-			continue
-		}
-		out[gid] = s.cachedGroupInsight(ctx, gid)
 	}
+	// 有界并发避免分组数乘上跨区往返；同组只读一次，不改变缓存或样本新鲜度。
+	var mu sync.Mutex
+	var reads errgroup.Group
+	reads.SetLimit(4)
+	groupIDs := make([]int64, 0, len(out))
+	for gid := range out {
+		groupIDs = append(groupIDs, gid)
+	}
+	for _, gid := range groupIDs {
+		reads.Go(func() error {
+			if ctx.Err() != nil {
+				return nil
+			}
+			insight := s.cachedGroupInsight(ctx, gid, cacheWindow)
+			mu.Lock()
+			out[gid] = insight
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = reads.Wait()
 	return out
 }
 
-func (s *ChannelMonitorService) cachedGroupInsight(ctx context.Context, groupID int64) *UserGroupInsight {
-	if cached, ok := s.groupInsightCache.Load(groupID); ok {
+func (s *ChannelMonitorService) cachedGroupInsight(ctx context.Context, groupID int64, cacheWindow time.Duration) *UserGroupInsight {
+	cacheWindow = normalizeCacheRateWindow(cacheWindow)
+	key := groupInsightCacheKey{groupID: groupID, windowSeconds: int64(cacheWindow.Seconds())}
+	if cached, ok := s.groupInsightCache.Load(key); ok {
 		if entry, valid := cached.(groupInsightCacheEntry); valid && time.Now().Before(entry.expiresAt) {
 			return s.withFreshGroupFirstTokens(ctx, groupID, entry.insight)
 		}
 	}
-	insight := s.loadGroupInsight(ctx, groupID)
-	s.groupInsightCache.Store(groupID, groupInsightCacheEntry{insight: insight, expiresAt: time.Now().Add(userGroupInsightTTL)})
+	insight := s.loadGroupInsight(ctx, groupID, cacheWindow)
+	// 页面取消不能把未完成读取发布成负缓存，恢复后应重新取真实指标。
+	if ctx.Err() != nil {
+		return nil
+	}
+	s.groupInsightCache.Store(key, groupInsightCacheEntry{insight: insight, expiresAt: time.Now().Add(userGroupInsightTTL)})
 	return s.withFreshGroupFirstTokens(ctx, groupID, insight)
 }
 
@@ -145,8 +231,8 @@ func (s *ChannelMonitorService) withFreshGroupFirstTokens(ctx context.Context, g
 }
 
 // loadGroupInsight 读分组实时指标；失败返回 nil（用户端降级不展示）。
-func (s *ChannelMonitorService) loadGroupInsight(ctx context.Context, groupID int64) *UserGroupInsight {
-	metrics, err := s.GroupMetrics(ctx, groupID, 24*time.Hour)
+func (s *ChannelMonitorService) loadGroupInsight(ctx context.Context, groupID int64, cacheWindow time.Duration) *UserGroupInsight {
+	metrics, err := s.GroupMetrics(ctx, groupID, normalizeCacheRateWindow(cacheWindow))
 	if err != nil || metrics == nil {
 		if err != nil {
 			slog.Warn("channel_monitor: load group insight failed", "group_id", groupID, "error", err)
@@ -255,7 +341,7 @@ func (s *ChannelMonitorService) GetUserDetail(ctx context.Context, id int64) (*U
 
 // detailGroupInsight 详情视图的分组指标：实时指标 + 倍率变更历史（画曲线用）。
 func (s *ChannelMonitorService) detailGroupInsight(ctx context.Context, groupID int64) *UserGroupInsight {
-	insight := s.cachedGroupInsight(ctx, groupID)
+	insight := s.cachedGroupInsight(ctx, groupID, DefaultCacheRateWindow)
 	if insight == nil {
 		return nil
 	}
@@ -269,6 +355,7 @@ func (s *ChannelMonitorService) detailGroupInsight(ctx context.Context, groupID 
 	history := make([]UserGroupRatePoint, 0, len(points))
 	for _, p := range points {
 		history = append(history, UserGroupRatePoint{
+			IsInitial:               p.IsInitial,
 			RateMultiplier:          p.RateMultiplier,
 			EffectiveRateMultiplier: p.EffectiveRateMultiplier,
 			RecordedAt:              p.RecordedAt,

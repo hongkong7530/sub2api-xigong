@@ -2,6 +2,7 @@
 package schema
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"time"
 
 	"entgo.io/ent"
@@ -132,6 +133,7 @@ func (UsageLog) Fields() []ent.Field {
 		// Observed first formal stream event through successful output completion.
 		// NULL for historical/non-streaming requests; never reconstructed from TTFT.
 		field.Int("output_duration_ms").Optional().Nillable(),
+		field.JSON("rate_observation", &ratemetric.Observation{}).Optional(),
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),

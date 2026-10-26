@@ -51,6 +51,8 @@ const (
 	FieldDescriptionColor = "description_color"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
+	// FieldProbeMode holds the string denoting the probe_mode field in the database.
+	FieldProbeMode = "probe_mode"
 	// FieldIntervalSeconds holds the string denoting the interval_seconds field in the database.
 	FieldIntervalSeconds = "interval_seconds"
 	// FieldJitterSeconds holds the string denoting the jitter_seconds field in the database.
@@ -119,6 +121,7 @@ var Columns = []string{
 	FieldDescription,
 	FieldDescriptionColor,
 	FieldEnabled,
+	FieldProbeMode,
 	FieldIntervalSeconds,
 	FieldJitterSeconds,
 	FieldLastCheckedAt,
@@ -182,6 +185,10 @@ var (
 	DescriptionColorValidator func(string) error
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
+	// DefaultProbeMode holds the default value on creation for the "probe_mode" field.
+	DefaultProbeMode string
+	// ProbeModeValidator is a validator for the "probe_mode" field. It is called by the builders before save.
+	ProbeModeValidator func(string) error
 	// IntervalSecondsValidator is a validator for the "interval_seconds" field. It is called by the builders before save.
 	IntervalSecondsValidator func(int) error
 	// DefaultJitterSeconds holds the default value on creation for the "jitter_seconds" field.
@@ -319,6 +326,11 @@ func ByDescriptionColor(opts ...sql.OrderTermOption) OrderOption {
 // ByEnabled orders the results by the enabled field.
 func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
+}
+
+// ByProbeMode orders the results by the probe_mode field.
+func ByProbeMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProbeMode, opts...).ToFunc()
 }
 
 // ByIntervalSeconds orders the results by the interval_seconds field.

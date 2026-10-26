@@ -129,13 +129,13 @@ func TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring(t *testing.T) {
 	})
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
 
-	idx := len(prepared.args) - 6
+	idx := len(prepared.args) - 7
 	arg, ok := prepared.args[idx].(sql.NullString)
 	require.True(t, ok, "upstream_request_id arg should be sql.NullString, got %T", prepared.args[idx])
 	require.True(t, arg.Valid)
 	require.Equal(t, upstreamRequestID, arg.String)
 	require.Equal(t, "text", usageLogInsertArgTypes[idx])
-	nodeArg, ok := prepared.args[len(prepared.args)-2].(string)
+	nodeArg, ok := prepared.args[len(prepared.args)-3].(string)
 	require.True(t, ok)
 	require.Equal(t, service.LoadOpsNodeIdentity().ID, nodeArg)
 
@@ -144,8 +144,8 @@ func TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, nullArg.Valid, "absent upstream request id must be NULL")
 
-	require.Equal(t, service.LoadOpsNodeIdentity().ID, prepared.args[len(prepared.args)-2])
-	require.Equal(t, "text", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-2])
+	require.Equal(t, service.LoadOpsNodeIdentity().ID, prepared.args[len(prepared.args)-3])
+	require.Equal(t, "text", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-3])
 	require.Contains(t, usageLogSelectColumns, "upstream_request_id")
 }
 
@@ -156,10 +156,10 @@ func TestUsageLogDynamicInsertBuildersCarryNodeID(t *testing.T) {
 	batchSQL, batchArgs := buildUsageLogBatchInsertQuery([]string{key}, map[string]usageLogInsertPrepared{key: prepared})
 	require.Contains(t, batchSQL, "node_id")
 	require.Len(t, batchArgs, len(prepared.args)+1, "create batch prepends input_idx")
-	require.Equal(t, service.LoadOpsNodeIdentity().ID, batchArgs[len(batchArgs)-2])
+	require.Equal(t, service.LoadOpsNodeIdentity().ID, batchArgs[len(batchArgs)-3])
 
 	bestEffortSQL, bestEffortArgs := buildUsageLogBestEffortInsertQuery([]usageLogInsertPrepared{prepared})
 	require.Contains(t, bestEffortSQL, "node_id")
 	require.Len(t, bestEffortArgs, len(prepared.args))
-	require.Equal(t, service.LoadOpsNodeIdentity().ID, bestEffortArgs[len(bestEffortArgs)-2])
+	require.Equal(t, service.LoadOpsNodeIdentity().ID, bestEffortArgs[len(bestEffortArgs)-3])
 }

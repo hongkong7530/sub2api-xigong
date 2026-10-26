@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 // formal model events, including preambles/reasoning, not HTTP headers or pings.
 // TTFT and health remain separate. Failed/incomplete streams have no rate.
 type streamOutputWindow struct {
+	arrivals      ratemetric.Collector
 	first         time.Time
 	end           time.Time
 	failed        bool
@@ -34,6 +36,7 @@ func (w *streamOutputWindow) observe(payload []byte, eventType string, now time.
 	if !gjson.ValidBytes(payload) {
 		return
 	}
+	w.arrivals.Observe(payload, eventType, now)
 	value := gjson.ParseBytes(payload)
 	kind := strings.TrimSpace(eventType)
 	if kind == "" {
@@ -137,6 +140,30 @@ func (w *streamOutputWindow) durationMs() *int {
 		return nil
 	}
 	return &ms
+}
+
+func observedStreamRateObservation(c *gin.Context) *ratemetric.Observation {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+	observer := upstreamResponseModelObserverFromContext(c)
+	if observer == nil {
+		return ratemetric.ForRequest(c.Request.Context(), nil, time.Now())
+	}
+	w := &observer.outputWindow
+	return ratemetric.ForRequest(c.Request.Context(), w.rateObservation(), time.Now())
+}
+
+func (w *streamOutputWindow) rateObservation() *ratemetric.Observation {
+	if w == nil {
+		return nil
+	}
+	var ms *int
+	if !w.first.IsZero() && !w.end.IsZero() {
+		n := int(w.end.Sub(w.first).Milliseconds())
+		ms = &n
+	}
+	return w.arrivals.Snapshot(ms, !w.failed && !w.pendingError && !w.first.IsZero() && !w.end.IsZero())
 }
 
 func observedStreamOutputDuration(c *gin.Context) *int {

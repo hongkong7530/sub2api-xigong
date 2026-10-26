@@ -3,10 +3,10 @@ import { siteContent, type PublicMonitorList } from '@/api/siteContent'
 
 export const HOME_MONITOR_INTERVAL_MS = 5000
 
-/** 一个首页列表一个读取所有者；离屏/后台停止，旧响应不能覆盖新一轮状态。 */
+/** 挂载即预取一次；离屏不轮询、后台取消，旧响应不能覆盖新一轮状态。 */
 export function useHomeMonitors(visible: Ref<boolean>) {
   const data = shallowRef<PublicMonitorList>()
-  const loading = shallowRef(false)
+  const loading = shallowRef(true)
   const failed = shallowRef(false)
   const countdown = shallowRef(5)
   let controller: AbortController | undefined
@@ -14,6 +14,7 @@ export function useHomeMonitors(visible: Ref<boolean>) {
   let ticker: ReturnType<typeof setInterval> | undefined
   let epoch = 0
   let alive = true
+  let initialReadPending = true
 
   function clearTimers() {
     clearTimeout(timer)
@@ -21,7 +22,7 @@ export function useHomeMonitors(visible: Ref<boolean>) {
   }
   async function refresh() {
     clearTimers()
-    if (!alive || !visible.value || document.hidden || controller) return
+    if (!alive || (!visible.value && !initialReadPending) || document.hidden || controller) return
     const token = ++epoch
     const current = new AbortController()
     controller = current
@@ -41,6 +42,7 @@ export function useHomeMonitors(visible: Ref<boolean>) {
     } finally {
       if (token === epoch) {
         controller = undefined
+        initialReadPending = false
         loading.value = false
         if (alive && visible.value && !document.hidden) {
           countdown.value = 5
@@ -52,7 +54,7 @@ export function useHomeMonitors(visible: Ref<boolean>) {
   }
   function reconcile() {
     clearTimers()
-    if (!visible.value || document.hidden) {
+    if (document.hidden || (!visible.value && !initialReadPending)) {
       epoch++
       controller?.abort()
       controller = undefined

@@ -73,6 +73,8 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 		return nil, err
 	}
 	chatReq.Model = upstreamModel
+	// Messages 的强类型转换不包含 OpenAI 扩展，显式档位须在策略执行前补回。
+	chatReq.ServiceTier = s.openAICompatMessagesServiceTier(ctx, account, upstreamModel, body)
 	chatReq.ReasoningEffort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, chatReq.ReasoningEffort)
 	chatReq.Stream = clientStream
 	if clientStream {

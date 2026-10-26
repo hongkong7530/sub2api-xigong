@@ -543,7 +543,12 @@ export default {
       probeModel: '主动探测模型：{model}',
       statusModelUnknown: '该次请求未记录模型',
       autoProvisionButton: '公开分组自动化',
+      probeMode: { label: '监控方式', hybrid: '主动 + 被动', passive: '完全被动', hybridHint: '优先采集真实请求；无近期真实请求时按所设间隔主动探测。', passiveHint: '只读取真实请求，不发主动探测；无请求时状态保持未知。' },
       autoProvision: {
+        retry: '重新加载',
+        setupTitle: '选择要配置的公开分组',
+        setupHint: '只处理勾选的分组。可逐组设置监控方式与15–3600秒探测间隔；已有自动监控仅更新模式与间隔，未选择或手工监控不改不删。广场条目只按所选组补齐，手工定价保留。',
+        searchGroups: '搜索公开分组', selectVisible: '选择当前列表', selectNone: '取消当前列表', existing: '已有自动监控', missing: '新建或保留手工监控', noMatchingGroups: '没有匹配的公开分组', invalidInterval: '探测间隔须为15至3600之间的整数秒。', selectedCount: '已选择 {count} 个分组', createSelected: '应用到所选分组', actionMonitorUpdated: '监控已更新',
         dialogTitle: '公开分组自动化报告',
         running: '自动化执行中…',
         runningHint: '正在发现模型并补齐监控与广场，可能需要约一分钟，请勿重复操作。',

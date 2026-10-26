@@ -584,6 +584,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		bridgeReplayInputExists := false
 		var bridgeAccountFailoverInput []json.RawMessage
 		bridgeAccountFailoverInputExists := false
+		currentRateTurnStart := time.Time{}
+		if hooks != nil && !hooks.InitialTurnStartedAt.IsZero() {
+			currentRateTurnStart = hooks.InitialTurnStartedAt
+		}
 		for turn := 1; ; turn++ {
 			if turn > 1 {
 				if err := cluster.CheckNewTurn(ctx); err != nil {
@@ -700,6 +704,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if bridgeErr != nil && isOpenAIWSSessionPreempted(ctx) {
 				return errOpenAIWSSessionPreempted
 			}
+			finishWSTurnRateObservation(result, currentRateTurnStart, bridgeErr)
 			if hooks != nil && hooks.AfterTurn != nil {
 				hooks.AfterTurn(turn, result, bridgeErr)
 			}
@@ -769,6 +774,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 				return fmt.Errorf("read client websocket request: %w", readErr)
 			}
+			currentRateTurnStart = time.Now()
 			nextPayload, parseErr := parseClientPayload(turn+1, nextClientMessage)
 			if parseErr != nil {
 				return parseErr
@@ -964,6 +970,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	var rejectedFieldRetryState *openAIResponsesRejectedFieldRetryState
 	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, requestedReasoningEffort *string) (*OpenAIForwardResult, error) {
 		responseModelObserver := &upstreamResponseModelObserver{}
+		// Pooled reads expose dequeue time, not an independent arrival clock.
+		responseModelObserver.outputWindow.arrivals.MarkTimingUncertain()
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
 		}
@@ -1250,6 +1258,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					UpstreamModel:                 mappedModel,
 					UpstreamResponseModel:         responseModelObserver.Model(),
 					OutputDurationMs:              responseModelObserver.outputWindow.durationMs(),
+					RateObservation:               responseModelObserver.outputWindow.rateObservation(),
 					UpstreamResponseModelConflict: responseModelObserver.Conflict(),
 					UpstreamResponseServiceTier:   responseModelObserver.ServiceTier(),
 					ServiceTier:                   resolvedOpenAIUpstreamServiceTierFromObserver(responseModelObserver, extractOpenAIServiceTierFromBody(payload)),
@@ -1343,6 +1352,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 	defer releaseSessionLease()
 
+	currentRateTurnStart := time.Time{}
+	if hooks != nil && !hooks.InitialTurnStartedAt.IsZero() {
+		currentRateTurnStart = hooks.InitialTurnStartedAt
+	}
 	turn := 1
 	rejectedFieldRetryState = newOpenAIResponsesRejectedFieldRetryState(currentPayload)
 	turnRetry := 0
@@ -1853,6 +1866,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		turnRetry = 0
 		turnPrevRecoveryTried = false
 		lastTurnFinishedAt = time.Now()
+		finishWSTurnRateObservation(result, currentRateTurnStart, relayErr)
 		lastTurnClean = true
 		if hooks != nil && hooks.AfterTurn != nil {
 			hooks.AfterTurn(turn, result, nil)
@@ -1921,6 +1935,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			return fmt.Errorf("read client websocket request: %w", readErr)
 		}
 
+		currentRateTurnStart = time.Now()
 		nextPayload, parseErr := parseClientPayload(turn+1, nextClientMessage)
 		if parseErr != nil {
 			return parseErr

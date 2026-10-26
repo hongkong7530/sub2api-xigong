@@ -23,6 +23,21 @@
         </button>
       </div>
 
+      <div class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200/60 bg-gray-100 p-0.5 text-xs dark:border-dark-700/60 dark:bg-dark-800" role="group" :aria-label="t('monitorCommon.cacheRateWindow')">
+        <span class="px-2 text-gray-500 dark:text-gray-400">{{ t('monitorCommon.cacheRateWindow') }}</span>
+        <button
+          v-for="option in cacheWindowOptions"
+          :key="option.value"
+          type="button"
+          class="rounded-lg px-2.5 py-1 transition-colors"
+          :aria-pressed="cacheWindowSeconds === option.value"
+          :class="cacheWindowSeconds === option.value ? 'bg-white font-semibold text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+          @click="emit('update:cacheWindowSeconds', option.value)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+
       <span
         class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wider uppercase"
         :class="overallChipClass"
@@ -64,6 +79,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import AutoRefreshButton from '@/components/common/AutoRefreshButton.vue'
 import MonitorNoticeBanner from './MonitorNoticeBanner.vue'
+import type { CacheRateWindowSeconds } from '@/api/channelMonitor'
 export type MonitorWindow = '7d' | '15d' | '30d'
 export type OverallStatus = 'operational' | 'degraded'
 
@@ -71,6 +87,7 @@ const props = defineProps<{
   overallStatus: OverallStatus
   intervalSeconds: number
   window: MonitorWindow
+  cacheWindowSeconds?: CacheRateWindowSeconds
   loading: boolean
   /** 渠道状态页顶部公告（Markdown）；空内容不渲染横幅。 */
   notice?: string | null
@@ -86,6 +103,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:window', value: MonitorWindow): void
+  (e: 'update:cacheWindowSeconds', value: CacheRateWindowSeconds): void
   (e: 'refresh'): void
 }>()
 
@@ -95,6 +113,13 @@ const windowOptions = computed<{ value: MonitorWindow; label: string }[]>(() => 
   { value: '7d', label: t('channelStatus.windowTab.7d') },
   { value: '15d', label: t('channelStatus.windowTab.15d') },
   { value: '30d', label: t('channelStatus.windowTab.30d') },
+])
+
+const cacheWindowOptions = computed<{ value: CacheRateWindowSeconds; label: string }[]>(() => [
+  { value: 1800, label: t('monitorCommon.cacheRateWindowTab.30m') },
+  { value: 3600, label: t('monitorCommon.cacheRateWindowTab.1h') },
+  { value: 21600, label: t('monitorCommon.cacheRateWindowTab.6h') },
+  { value: 86400, label: t('monitorCommon.cacheRateWindowTab.24h') },
 ])
 
 const overallLabel = computed(() => t(`channelStatus.overall.${props.overallStatus}`))

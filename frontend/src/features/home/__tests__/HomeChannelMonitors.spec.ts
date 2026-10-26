@@ -23,7 +23,7 @@ const item: UserMonitorView = {
   primary_latency_ms: null, primary_first_token_ms: null, primary_output_tokens_per_second: null,
   availability_7d: null, extra_models: [],
   timeline: [{ source: 'user_request', model: '', status: 'failed', latency_ms: null, first_token_ms: null, checked_at: '2026-10-16T12:00:00Z' }],
-  group_insight: { rate_multiplier: 1, effective_rate_multiplier: 1.25, peak_rate_enabled: false, peak_rate_multiplier: 1, applied_peak_multiplier: 1, cache_hit_rate: null, recent_first_tokens: [] },
+  group_insight: { rate_multiplier: 1, effective_rate_multiplier: 1.25, peak_rate_enabled: false, peak_rate_multiplier: 1, applied_peak_multiplier: 1, cache_hit_rate: null, cache_window_seconds: 1800, recent_first_tokens: [] },
 }
 let dispose: (() => void) | undefined
 beforeEach(() => {
@@ -59,6 +59,7 @@ describe('public homepage channel cards', () => {
     expect(card.attributes('data-status')).toBe('failed')
     expect(card.text()).toContain('Real channel')
     expect(card.text()).toContain('1.2500')
+    expect(card.text()).toContain('monitorCommon.cacheRateWindowTab.30m')
     expect(card.findAll('.monitor-metrics__value').map(n => n.text())).toEqual(['monitorCommon.latencyEmptyms', '—tok/s'])
     expect(card.findAll('.monitor-timeline__bar')).toHaveLength(60)
     expect(card.get('.monitor-availability__value').text()).toBe('monitorCommon.latencyEmpty')

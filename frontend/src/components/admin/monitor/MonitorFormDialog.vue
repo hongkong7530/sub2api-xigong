@@ -153,7 +153,9 @@
         <input v-model="form.group_name" type="text" class="input" :placeholder="t('admin.channelMonitor.form.groupNamePlaceholder')" />
       </div>
 
-      <div>
+      <div v-if="editing?.group_id && form.check_mode === CHECK_MODE_PROBE"><label class="input-label">{{ t('admin.channelMonitor.probeMode.label') }}</label><select v-model="form.probe_mode" class="input"><option value="hybrid">{{ t('admin.channelMonitor.probeMode.hybrid') }}</option><option value="passive">{{ t('admin.channelMonitor.probeMode.passive') }}</option></select><p class="mt-1 text-xs text-gray-500">{{ t(form.probe_mode === 'passive' ? 'admin.channelMonitor.probeMode.passiveHint' : 'admin.channelMonitor.probeMode.hybridHint') }}</p></div>
+
+      <div v-if="form.probe_mode !== 'passive'">
         <label class="input-label">{{ t('admin.channelMonitor.form.intervalSeconds') }} <span class="text-red-500">*</span></label>
         <input v-model.number="form.interval_seconds" type="number" min="15" max="3600" required class="input" />
         <p class="mt-1 text-xs text-gray-400">{{ t('admin.channelMonitor.form.intervalSecondsHint') }}</p>
@@ -329,6 +331,7 @@ interface MonitorForm {
   primary_model: string
   extra_models: string[]
   group_name: string
+  probe_mode: 'hybrid' | 'passive'
   interval_seconds: number
   jitter_seconds: number
   enabled: boolean
@@ -350,6 +353,7 @@ const form = reactive<MonitorForm>({
   primary_model: '',
   extra_models: [],
   group_name: '',
+  probe_mode: 'hybrid',
   interval_seconds: systemDefaultInterval.value,
   jitter_seconds: 0,
   enabled: true,
@@ -735,6 +739,7 @@ function resetForm() {
   form.primary_model = ''
   form.extra_models = []
   form.group_name = ''
+  form.probe_mode = 'hybrid'
   form.interval_seconds = systemDefaultInterval.value
   form.jitter_seconds = 0
   form.enabled = true
@@ -757,6 +762,7 @@ function loadFromMonitor(m: ChannelMonitor) {
   form.primary_model = m.primary_model
   form.extra_models = [...(m.extra_models || [])]
   form.group_name = m.group_name || ''
+  form.probe_mode = m.probe_mode ?? 'hybrid'
   form.interval_seconds = m.interval_seconds || systemDefaultInterval.value
   form.jitter_seconds = m.jitter_seconds || 0
   form.enabled = m.enabled
@@ -825,6 +831,7 @@ function buildPayload(): CreateParams {
     extra_models: usesProbePart.value ? form.extra_models : [],
     group_name: form.group_name.trim(),
     enabled: form.enabled,
+    probe_mode: form.probe_mode,
     interval_seconds: form.interval_seconds,
     jitter_seconds: form.jitter_seconds || 0,
     template_id: usesProbePart.value ? form.template_id : null,

@@ -1,0 +1,113 @@
+{
+  "notice": "Generic chibi companions derived from Niabot. Not official provider mascots or an endorsement. Artwork derivatives CC BY-SA 3.0; application code is separately licensed.",
+  "assets": [
+    {
+      "provider_theme": "chatgpt",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "chatgpt.webp",
+      "sha256": "a04bbef533dd9f21923228f646be6c42e331bf2f4589a9c38a18d23929f0b86e",
+      "bytes": 15500
+    },
+    {
+      "provider_theme": "claude",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "claude.webp",
+      "sha256": "26fd0ad22b233e46d0af9f31d236079bcc157c56ed81ba2148bf7f033203250a",
+      "bytes": 15624
+    },
+    {
+      "provider_theme": "gemini",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "gemini.webp",
+      "sha256": "b073da72ecdb6e37e6a299cbe611a664ee11a7b2c08dbe75583d338847f9229d",
+      "bytes": 15730
+    },
+    {
+      "provider_theme": "grok",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "grok.webp",
+      "sha256": "50669ec358738c7a32b25f42f4321fd7c89b0a3dbf1a56857a14e1b177670b91",
+      "bytes": 15892
+    },
+    {
+      "provider_theme": "deepseek",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "deepseek.webp",
+      "sha256": "a556315ee9380bb1dc423a12f58d5ff2ba975de65a7149f233800f8d411c2eb7",
+      "bytes": 15928
+    },
+    {
+      "provider_theme": "glm",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "glm.webp",
+      "sha256": "e2e364e8f037a317323f200bf643658d930541e302b33d364c98272442da3c69",
+      "bytes": 15746
+    },
+    {
+      "provider_theme": "kimi",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "kimi.webp",
+      "sha256": "6fcd4030b1b9fdea93824f0ae7a5d18939ca4588292b4cffa725eff360361fe2",
+      "bytes": 15696
+    },
+    {
+      "provider_theme": "minimax",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "minimax.webp",
+      "sha256": "172e5cd35063139d6a61111ab6c19d96b854cb15b07298a559649abb3e1bf9fe",
+      "bytes": 15724
+    },
+    {
+      "provider_theme": "mimo",
+      "author": "Niabot",
+      "source": "https://commons.wikimedia.org/wiki/File:Girl_in_chibi_style.svg",
+      "source_file": "https://upload.wikimedia.org/wikipedia/commons/d/d3/Girl_in_chibi_style.svg",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Rasterized/resized, WebP re-encoded and hair recolored; this derivative is CC BY-SA 3.0. Generic thematic companion, not a provider official character.",
+      "file": "mimo.webp",
+      "sha256": "87617aea66b61d6c084f9898bf60a2b6e61189710dabfba0cf7110752a92c562",
+      "bytes": 15332
+    }
+  ]
+}

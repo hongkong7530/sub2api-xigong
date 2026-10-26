@@ -276,9 +276,15 @@ func TestClusterSettlementReconcilesStaleExecutionsFromLedger(t *testing.T) {
 	live := uuid.NewString()
 	_, err = db.ExecContext(ctx, `INSERT INTO cluster_executions(execution_id,cluster_id,node_id,boot_id,protocol,state,work_finished) VALUES($1,$2,'worker-a',$3,'fixture','needs_review',TRUE)`, live, clusterID, uuid.NewString())
 	require.NoError(t, err)
-	resolved, err := repo.reconcileStaleExecutions(ctx, map[string][]byte{withEvidence: encoded}, clusterStaleExecutionGrace, clusterStaleExecutionBatch)
+	// Completion-only evidence must not be confused with unreplayed monetary commands.
+	completionOnly := makeStale("needs_review")
+	require.NoError(t, repo.journal.reserve.Reserve(completionOnly))
+	require.NoError(t, repo.journal.reserve.SaveCompletion(completionOnly, "needs_review"))
+	pendingEvidence, err := repo.journal.reserve.ReadAll()
 	require.NoError(t, err)
-	require.Equal(t, 2, resolved, "booked and unbooked finished rows are reconciled")
+	resolved, err := repo.reconcileStaleExecutions(ctx, pendingEvidence, clusterStaleExecutionGrace, clusterStaleExecutionBatch)
+	require.NoError(t, err)
+	require.Equal(t, 3, resolved, "booked, unbooked and completion-only finished rows are reconciled")
 	stateOf := func(executionID string) string {
 		var state string
 		require.NoError(t, db.QueryRowContext(ctx, `SELECT state FROM cluster_executions WHERE execution_id=$1`, executionID).Scan(&state))
@@ -288,6 +294,11 @@ func TestClusterSettlementReconcilesStaleExecutionsFromLedger(t *testing.T) {
 	require.Equal(t, "rejected", stateOf(unbooked), "no ledger row proves no money was taken")
 	require.Equal(t, "awaiting_settlement", stateOf(withEvidence), "replayable evidence must be left for the replay loop")
 	require.Equal(t, "needs_review", stateOf(live), "a request inside the grace window must not be raced")
+	require.Equal(t, "rejected", stateOf(completionOnly))
+	remaining, err := repo.journal.reserve.ReadAll()
+	require.NoError(t, err)
+	require.NotContains(t, remaining, completionOnly)
+	require.NotEmpty(t, remaining[withEvidence], "monetary evidence is retained")
 	var balance float64
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
 	require.Equal(t, 8.0, balance, "reconciliation never moves money")

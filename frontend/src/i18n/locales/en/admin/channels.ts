@@ -543,7 +543,12 @@ export default {
       probeModel: 'Configured probe model: {model}',
       statusModelUnknown: 'Model not recorded for this request',
       autoProvisionButton: 'Auto-provision public groups',
+      probeMode: { label: 'Monitoring mode', hybrid: 'Active + passive', passive: 'Passive only', hybridHint: 'Prefer real requests; probe at the configured interval when there are no recent real requests.', passiveHint: 'Read real requests only. No active probes; without requests, status remains unknown.' },
       autoProvision: {
+        retry: 'Reload groups',
+        setupTitle: 'Choose public groups',
+        setupHint: 'Only checked groups are processed. Set a mode and a 15–3600 second probe interval per group. Existing auto monitors only update these options; unselected and manual monitors are left untouched. Plaza entries follow the selected groups and manual pricing is preserved.',
+        searchGroups: 'Search public groups', selectVisible: 'Select visible', selectNone: 'Clear visible', existing: 'Existing auto monitor', missing: 'Create or keep manual monitor', noMatchingGroups: 'No matching public groups', invalidInterval: 'Probe intervals must be whole seconds between 15 and 3600.', selectedCount: '{count} groups selected', createSelected: 'Apply to selected groups', actionMonitorUpdated: 'Monitor updated',
         dialogTitle: 'Public group automation report',
         running: 'Automation running…',
         runningHint: 'Discovering models and provisioning monitors and plaza entries may take about a minute. Do not submit again.',

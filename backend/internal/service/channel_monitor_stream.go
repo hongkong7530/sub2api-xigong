@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"io"
 	"net/http"
 	"strings"
@@ -252,7 +253,7 @@ func runStreamingProbe(ctx context.Context, adapter streamAdapter, endpoint, api
 	finalizeFirstTokenStatus(res, *measurement.first, ms)
 	if measurement.complete {
 		// Formal preamble/reasoning starts the output window; TTFT health is unchanged.
-		if outputMs := measurement.outputWindow.durationMs(); outputMs != nil {
+		if outputMs := measurement.outputWindow.durationMs(); outputMs != nil && ratemetric.IsEligible(measurement.outputWindow.rateObservation()) {
 			zero := 0
 			res.OutputTokensPerSecond = MonitorOutputRate(measurement.outputTokens, outputMs, &zero)
 		}

@@ -22,15 +22,42 @@ function setup(initiallyVisible = true) {
   return { visible, state }
 }
 describe('public homepage monitor reads', () => {
-  it('loads only near the viewport and refreshes every five seconds without overlap', async () => {
+  it('prefetches once on mount, pauses offscreen and refreshes every five seconds when visible', async () => {
     const { visible, state } = setup(false)
+    expect(state.loading.value).toBe(true)
+    expect(monitors).toHaveBeenCalledTimes(1)
+    await flushPromises()
+    expect(state.data.value).toEqual(snapshot)
     await vi.advanceTimersByTimeAsync(10000)
-    expect(monitors).not.toHaveBeenCalled()
+    expect(monitors).toHaveBeenCalledTimes(1)
     visible.value = true; await flushPromises()
+    expect(monitors).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(4999); expect(monitors).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1); expect(monitors).toHaveBeenCalledTimes(3)
+  })
+  it('does not abort initial prefetch when the viewport changes and never overlaps it', async () => {
+    let finish!: (value: typeof snapshot) => void
+    monitors.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const { visible, state } = setup(false)
+    const signal = monitors.mock.calls[0][0] as AbortSignal
+    visible.value = true; await flushPromises()
+    visible.value = false; await flushPromises()
+    expect(signal.aborted).toBe(false)
+    expect(monitors).toHaveBeenCalledTimes(1)
+    finish(snapshot); await flushPromises()
+    expect(state.data.value).toEqual(snapshot)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(monitors).toHaveBeenCalledTimes(1)
+  })
+  it('defers prefetch while the document is hidden and resumes once without offscreen polling', async () => {
+    hidden = true
+    const { state } = setup(false)
+    expect(monitors).not.toHaveBeenCalled()
+    hidden = false; document.dispatchEvent(new Event('visibilitychange')); await flushPromises()
     expect(monitors).toHaveBeenCalledTimes(1)
     expect(state.data.value).toEqual(snapshot)
-    await vi.advanceTimersByTimeAsync(4999); expect(monitors).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(1); expect(monitors).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(monitors).toHaveBeenCalledTimes(1)
   })
   it('honours feature-off and empty responses and clears inaccessible names on failure', async () => {
     const { state } = setup(); await flushPromises()

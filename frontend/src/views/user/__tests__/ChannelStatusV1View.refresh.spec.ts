@@ -1,9 +1,10 @@
+/// <reference path="../../../vite-env.d.ts" />
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ChannelStatusV1View from '../ChannelStatusV1View.vue'
 
 const { list } = vi.hoisted(() => ({ list: vi.fn() }))
-vi.mock('@/api/channelMonitor', () => ({ list, status: vi.fn(), listSubscriptions: vi.fn().mockResolvedValue({ items: [] }), listSubmittedReports: vi.fn().mockResolvedValue({ group_ids: [] }) }))
+vi.mock('@/api/channelMonitor', () => ({ DEFAULT_CACHE_RATE_WINDOW_SECONDS: 1800, list, status: vi.fn(), listSubscriptions: vi.fn().mockResolvedValue({ items: [] }), listSubmittedReports: vi.fn().mockResolvedValue({ group_ids: [] }) }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ cachedPublicSettings: { channel_monitor_enabled: true }, showError: vi.fn() }) }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAuthenticated: false, user: null }) }))
 vi.mock('vue-i18n', async () => ({
@@ -13,8 +14,9 @@ vi.mock('vue-i18n', async () => ({
 const mountView = () => shallowMount(ChannelStatusV1View, {
   global: { stubs: {
     AppLayout: { template: '<div><slot /></div>' },
-    MonitorHero: { props: ['autoRefresh'], emits: ['refresh'], template: `<div>
+    MonitorHero: { props: ['autoRefresh'], emits: ['refresh', 'update:cacheWindowSeconds'], template: `<div>
       <button class="interval" @click="autoRefresh.setInterval(120)">120 seconds</button>
+      <button class="cache-window" @click="$emit('update:cacheWindowSeconds', 3600)">1 hour</button>
       <button class="refresh" @click="$emit('refresh')">Refresh</button>
       <button class="disable" @click="autoRefresh.setEnabled(false)">Disable</button>
     </div>` },
@@ -33,9 +35,22 @@ describe('channel monitor refresh interval', () => {
     const calls = list.mock.calls.length
     await vi.advanceTimersByTimeAsync(240000)
     expect(list).toHaveBeenCalledTimes(calls)
-    expect(JSON.parse(localStorage.getItem('channel-status-auto-refresh')!).enabled).toBe(false)
+    expect(JSON.parse(localStorage.getItem('channel-status-hybrid-auto-refresh')!).enabled).toBe(false)
     await wrapper.get('.refresh').trigger('click'); await flushPromises()
     expect(list).toHaveBeenCalledTimes(calls + 1)
+  })
+
+  it('defaults cache-rate reads to 30 minutes and persists the selected window', async () => {
+    wrapper = mountView(); await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ cacheWindowSeconds: 1800 }))
+
+    await wrapper.get('.cache-window').trigger('click'); await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ cacheWindowSeconds: 3600 }))
+    expect(localStorage.getItem('channel-status-cache-rate-window-seconds')).toBe('3600')
+
+    wrapper.unmount()
+    wrapper = mountView(); await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ cacheWindowSeconds: 3600 }))
   })
 
   it('starts automatic refresh for a first visit', async () => {
@@ -69,7 +84,7 @@ describe('channel monitor refresh interval', () => {
   })
 
   it('honors a persisted interval after the initial load', async () => {
-    localStorage.setItem('channel-status-auto-refresh', JSON.stringify({ enabled: true, interval_seconds: 120 }))
+    localStorage.setItem('channel-status-hybrid-auto-refresh', JSON.stringify({ enabled: true, interval_seconds: 120 }))
     wrapper = mountView(); await flushPromises()
     await vi.advanceTimersByTimeAsync(119000)
     expect(list).toHaveBeenCalledTimes(1)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"io"
 	"net"
 	"strconv"
@@ -45,6 +46,7 @@ type RelayResult struct {
 	TerminalEventType       string
 	FirstTokenMs            *int
 	OutputDurationMs        *int
+	RateObservation         *ratemetric.Observation
 	Duration                time.Duration
 	ClientToUpstreamFrames  int64
 	UpstreamToClientFrames  int64
@@ -63,6 +65,7 @@ type RelayTurnResult struct {
 	Duration              time.Duration
 	FirstTokenMs          *int
 	OutputDurationMs      *int
+	RateObservation       *ratemetric.Observation
 }
 
 type RelayExit struct {
@@ -116,6 +119,7 @@ type relayState struct {
 	terminalEventType       string
 	firstTokenMs            *int
 	outputDurationMs        *int
+	rateObservation         *ratemetric.Observation
 	turnTimingByID          map[string]*relayTurnTiming
 	activeTurn              *relayTurnTiming
 	pendingBareError        *observedUpstreamEvent
@@ -140,6 +144,7 @@ type observedUpstreamEvent struct {
 	duration            time.Duration
 	firstToken          *int
 	outputDuration      *int
+	rateObservation     *ratemetric.Observation
 	outputComplete      bool
 }
 
@@ -147,6 +152,7 @@ type relayTurnTiming struct {
 	startAt               time.Time
 	firstTokenMs          *int
 	firstStreamAt         time.Time
+	arrivals              ratemetric.Collector
 	firstResponseModel    string
 	terminalResponseModel string
 	responseModelConflict bool
@@ -617,8 +623,9 @@ func runUpstreamToClient(
 				openAIWSRelayDiscardActiveTurnTiming(state)
 			}
 		}
-		emitTurnComplete(onTurnComplete, state, observedEvent)
 		if dropDownstreamWrites != nil && dropDownstreamWrites.Load() {
+			observedEvent = finishRelayObservationDelivery(state, observedEvent, nowFn(), false)
+			emitTurnComplete(onTurnComplete, state, observedEvent)
 			if droppedFrames != nil {
 				droppedFrames.Add(1)
 			}
@@ -648,6 +655,8 @@ func runUpstreamToClient(
 			afterClientWrite(msgType, payload, writeErr)
 		}
 		if writeErr != nil {
+			observedEvent = finishRelayObservationDelivery(state, observedEvent, nowFn(), false)
+			emitTurnComplete(onTurnComplete, state, observedEvent)
 			emitRelayTrace(onTrace, RelayTraceEvent{
 				Stage:           "write_client_failed",
 				Direction:       "upstream_to_client",
@@ -659,6 +668,9 @@ func runUpstreamToClient(
 			exitCh <- relayExitSignal{stage: "write_client", err: writeErr, wroteDownstream: wroteDownstream}
 			return
 		}
+		// Usage is retained on failed delivery, but eligibility is published only after the terminal write.
+		observedEvent = finishRelayObservationDelivery(state, observedEvent, nowFn(), true)
+		emitTurnComplete(onTurnComplete, state, observedEvent)
 		wroteDownstream = true
 		if state != nil {
 			state.turnWroteDownstream.Store(true)
@@ -807,6 +819,11 @@ func observeUpstreamMessage(
 	} else {
 		turnTiming = state.activeTurn
 	}
+	if turnTiming != nil {
+		// This relay reads again only after synchronous downstream writes. That spacing cannot prove independent arrivals.
+		turnTiming.arrivals.MarkTimingUncertain()
+		turnTiming.arrivals.Observe(message, eventType, now)
+	}
 	// Preambles are formal stream output too; preserve TTFT's token-event meaning.
 	if turnTiming != nil && turnTiming.firstStreamAt.IsZero() && strings.HasPrefix(eventType, "response.") && !isTerminalEvent(eventType) {
 		turnTiming.firstStreamAt = now
@@ -884,19 +901,38 @@ func finalizeObservedRelayTerminal(state *relayState, observed observedUpstreamE
 			}
 			observed.startedAt = turnTiming.startAt
 			observed.duration = duration
+			observed.rateObservation = ratemetric.WithDuration(turnTiming.arrivals.Snapshot(nil, observed.outputComplete), turnTiming.startAt, now, "ws_turn")
 			observed.firstToken = openAIWSRelayCloneIntPtr(turnTiming.firstTokenMs)
 			state.outputDurationMs = nil
+			state.rateObservation = observed.rateObservation
 			if observed.outputComplete && !turnTiming.firstStreamAt.IsZero() {
 				ms := int(now.Sub(turnTiming.firstStreamAt).Milliseconds())
 				if ms >= 100 {
 					observed.outputDuration = &ms
 					state.outputDurationMs = &ms
+					observed.rateObservation = ratemetric.WithDuration(turnTiming.arrivals.Snapshot(&ms, true), turnTiming.startAt, now, "ws_turn")
+					state.rateObservation = observed.rateObservation
 				}
 			}
 		}
 	} else {
 		state.consumePendingTurnStartedAt()
 		openAIWSRelayDiscardActiveTurnTiming(state)
+	}
+	return observed
+}
+
+// Delivery does not change upstream usage or legacy timing. Failed/drained output cannot earn speed qualification.
+func finishRelayObservationDelivery(state *relayState, observed observedUpstreamEvent, now time.Time, delivered bool) observedUpstreamEvent {
+	if !observed.terminal {
+		return observed
+	}
+	observed.rateObservation = ratemetric.WithDuration(observed.rateObservation, observed.startedAt, now, "ws_turn")
+	if !delivered {
+		observed.rateObservation.Quality = "incomplete"
+	}
+	if state != nil {
+		state.rateObservation = observed.rateObservation
 	}
 	return observed
 }
@@ -929,6 +965,7 @@ func emitTurnComplete(
 		Duration:              observed.duration,
 		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
 		OutputDurationMs:      openAIWSRelayCloneIntPtr(observed.outputDuration),
+		RateObservation:       observed.rateObservation,
 	})
 }
 
@@ -1294,6 +1331,7 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 	result.TerminalEventType = state.terminalEventType
 	result.FirstTokenMs = state.firstTokenMs
 	result.OutputDurationMs = openAIWSRelayCloneIntPtr(state.outputDurationMs)
+	result.RateObservation = state.rateObservation
 }
 
 func (s *relayState) setRequestModel(model string) {

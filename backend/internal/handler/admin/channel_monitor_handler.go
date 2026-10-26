@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +56,9 @@ type channelMonitorCreateRequest struct {
 	ExtraModels      []string          `json:"extra_models"`
 	GroupName        string            `json:"group_name" binding:"max=100"`
 	Enabled          *bool             `json:"enabled"`
+	ProbeMode        string            `json:"probe_mode" binding:"omitempty,oneof=hybrid passive"`
+	GroupID          *int64            `json:"group_id"`
+	KeyProvisionMode string            `json:"key_provision_mode" binding:"omitempty,oneof=manual auto"`
 	IntervalSeconds  int               `json:"interval_seconds" binding:"required,min=15,max=3600"`
 	JitterSeconds    int               `json:"jitter_seconds" binding:"omitempty,min=0,max=3585"`
 	TemplateID       *int64            `json:"template_id"`
@@ -79,6 +83,7 @@ type channelMonitorUpdateRequest struct {
 	ExtraModels      *[]string          `json:"extra_models"`
 	GroupName        *string            `json:"group_name" binding:"omitempty,max=100"`
 	Enabled          *bool              `json:"enabled"`
+	ProbeMode        *string            `json:"probe_mode" binding:"omitempty,oneof=hybrid passive"`
 	IntervalSeconds  *int               `json:"interval_seconds" binding:"omitempty,min=15,max=3600"`
 	JitterSeconds    *int               `json:"jitter_seconds" binding:"omitempty,min=0,max=3585"`
 	TemplateID       *int64             `json:"template_id"`
@@ -113,6 +118,7 @@ type channelMonitorResponse struct {
 	PrimaryFirstTokenMs *int                                 `json:"primary_first_token_ms"`
 	OverallStatus       string                               `json:"overall_status"`
 	Enabled             bool                                 `json:"enabled"`
+	ProbeMode           string                               `json:"probe_mode"`
 	IntervalSeconds     int                                  `json:"interval_seconds"`
 	JitterSeconds       int                                  `json:"jitter_seconds"`
 	LastCheckedAt       *string                              `json:"last_checked_at"`
@@ -195,6 +201,7 @@ func channelMonitorToResponse(m *service.ChannelMonitor) *channelMonitorResponse
 		Description:         m.Description,
 		DescriptionColor:    m.DescriptionColor,
 		Enabled:             m.Enabled,
+		ProbeMode:           service.DefaultMonitorProbeMode(m.ProbeMode),
 		IntervalSeconds:     m.IntervalSeconds,
 		JitterSeconds:       m.JitterSeconds,
 		CreatedBy:           m.CreatedBy,
@@ -367,7 +374,10 @@ func (h *ChannelMonitorHandler) Create(c *gin.Context) {
 		PrimaryModel:     req.PrimaryModel,
 		ExtraModels:      req.ExtraModels,
 		GroupName:        req.GroupName,
+		GroupID:          req.GroupID,
+		KeyProvisionMode: req.KeyProvisionMode,
 		Enabled:          enabled,
+		ProbeMode:        req.ProbeMode,
 		IntervalSeconds:  req.IntervalSeconds,
 		JitterSeconds:    req.JitterSeconds,
 		CreatedBy:        subject.UserID,
@@ -464,6 +474,7 @@ func (h *ChannelMonitorHandler) Update(c *gin.Context) {
 		ExtraModels:      req.ExtraModels,
 		GroupName:        req.GroupName,
 		Enabled:          req.Enabled,
+		ProbeMode:        req.ProbeMode,
 		IntervalSeconds:  req.IntervalSeconds,
 		JitterSeconds:    req.JitterSeconds,
 		TemplateID:       req.TemplateID,
@@ -520,8 +531,16 @@ func (h *ChannelMonitorHandler) AutoProvision(c *gin.Context) {
 		response.ErrorFrom(c, infraerrors.ServiceUnavailable("GROUP_AUTOMATION_UNAVAILABLE", "group automation is not configured"))
 		return
 	}
+	var req struct {
+		Groups []service.GroupAutomationSelection `json:"groups" binding:"required,min=1,max=500,dive"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 65536)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("GROUP_SELECTION_REQUIRED", "Select public groups and monitoring options"))
+		return
+	}
 	subject, _ := middleware2.GetAuthSubjectFromContext(c)
-	report, err := h.automationService.AutoProvisionPublicGroups(c.Request.Context(), subject.UserID)
+	report, err := h.automationService.AutoProvisionPublicGroups(c.Request.Context(), subject.UserID, req.Groups...)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -135,6 +135,11 @@ func Enabled(v bool) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldEQ(FieldEnabled, v))
 }
 
+// ProbeMode applies equality check predicate on the "probe_mode" field. It's identical to ProbeModeEQ.
+func ProbeMode(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEQ(FieldProbeMode, v))
+}
+
 // IntervalSeconds applies equality check predicate on the "interval_seconds" field. It's identical to IntervalSecondsEQ.
 func IntervalSeconds(v int) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldEQ(FieldIntervalSeconds, v))
@@ -1083,6 +1088,71 @@ func EnabledEQ(v bool) predicate.ChannelMonitor {
 // EnabledNEQ applies the NEQ predicate on the "enabled" field.
 func EnabledNEQ(v bool) predicate.ChannelMonitor {
 	return predicate.ChannelMonitor(sql.FieldNEQ(FieldEnabled, v))
+}
+
+// ProbeModeEQ applies the EQ predicate on the "probe_mode" field.
+func ProbeModeEQ(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEQ(FieldProbeMode, v))
+}
+
+// ProbeModeNEQ applies the NEQ predicate on the "probe_mode" field.
+func ProbeModeNEQ(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldNEQ(FieldProbeMode, v))
+}
+
+// ProbeModeIn applies the In predicate on the "probe_mode" field.
+func ProbeModeIn(vs ...string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldIn(FieldProbeMode, vs...))
+}
+
+// ProbeModeNotIn applies the NotIn predicate on the "probe_mode" field.
+func ProbeModeNotIn(vs ...string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldNotIn(FieldProbeMode, vs...))
+}
+
+// ProbeModeGT applies the GT predicate on the "probe_mode" field.
+func ProbeModeGT(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldGT(FieldProbeMode, v))
+}
+
+// ProbeModeGTE applies the GTE predicate on the "probe_mode" field.
+func ProbeModeGTE(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldGTE(FieldProbeMode, v))
+}
+
+// ProbeModeLT applies the LT predicate on the "probe_mode" field.
+func ProbeModeLT(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldLT(FieldProbeMode, v))
+}
+
+// ProbeModeLTE applies the LTE predicate on the "probe_mode" field.
+func ProbeModeLTE(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldLTE(FieldProbeMode, v))
+}
+
+// ProbeModeContains applies the Contains predicate on the "probe_mode" field.
+func ProbeModeContains(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldContains(FieldProbeMode, v))
+}
+
+// ProbeModeHasPrefix applies the HasPrefix predicate on the "probe_mode" field.
+func ProbeModeHasPrefix(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldHasPrefix(FieldProbeMode, v))
+}
+
+// ProbeModeHasSuffix applies the HasSuffix predicate on the "probe_mode" field.
+func ProbeModeHasSuffix(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldHasSuffix(FieldProbeMode, v))
+}
+
+// ProbeModeEqualFold applies the EqualFold predicate on the "probe_mode" field.
+func ProbeModeEqualFold(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldEqualFold(FieldProbeMode, v))
+}
+
+// ProbeModeContainsFold applies the ContainsFold predicate on the "probe_mode" field.
+func ProbeModeContainsFold(v string) predicate.ChannelMonitor {
+	return predicate.ChannelMonitor(sql.FieldContainsFold(FieldProbeMode, v))
 }
 
 // IntervalSecondsEQ applies the EQ predicate on the "interval_seconds" field.

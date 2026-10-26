@@ -305,6 +305,20 @@ func (_u *ChannelMonitorUpdate) SetNillableEnabled(v *bool) *ChannelMonitorUpdat
 	return _u
 }
 
+// SetProbeMode sets the "probe_mode" field.
+func (_u *ChannelMonitorUpdate) SetProbeMode(v string) *ChannelMonitorUpdate {
+	_u.mutation.SetProbeMode(v)
+	return _u
+}
+
+// SetNillableProbeMode sets the "probe_mode" field if the given value is not nil.
+func (_u *ChannelMonitorUpdate) SetNillableProbeMode(v *string) *ChannelMonitorUpdate {
+	if v != nil {
+		_u.SetProbeMode(*v)
+	}
+	return _u
+}
+
 // SetIntervalSeconds sets the "interval_seconds" field.
 func (_u *ChannelMonitorUpdate) SetIntervalSeconds(v int) *ChannelMonitorUpdate {
 	_u.mutation.ResetIntervalSeconds()
@@ -635,6 +649,11 @@ func (_u *ChannelMonitorUpdate) check() error {
 			return &ValidationError{Name: "description_color", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitor.description_color": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ProbeMode(); ok {
+		if err := channelmonitor.ProbeModeValidator(v); err != nil {
+			return &ValidationError{Name: "probe_mode", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitor.probe_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.IntervalSeconds(); ok {
 		if err := channelmonitor.IntervalSecondsValidator(v); err != nil {
 			return &ValidationError{Name: "interval_seconds", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitor.interval_seconds": %w`, err)}
@@ -741,6 +760,9 @@ func (_u *ChannelMonitorUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(channelmonitor.FieldEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProbeMode(); ok {
+		_spec.SetField(channelmonitor.FieldProbeMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.IntervalSeconds(); ok {
 		_spec.SetField(channelmonitor.FieldIntervalSeconds, field.TypeInt, value)
@@ -1190,6 +1212,20 @@ func (_u *ChannelMonitorUpdateOne) SetNillableEnabled(v *bool) *ChannelMonitorUp
 	return _u
 }
 
+// SetProbeMode sets the "probe_mode" field.
+func (_u *ChannelMonitorUpdateOne) SetProbeMode(v string) *ChannelMonitorUpdateOne {
+	_u.mutation.SetProbeMode(v)
+	return _u
+}
+
+// SetNillableProbeMode sets the "probe_mode" field if the given value is not nil.
+func (_u *ChannelMonitorUpdateOne) SetNillableProbeMode(v *string) *ChannelMonitorUpdateOne {
+	if v != nil {
+		_u.SetProbeMode(*v)
+	}
+	return _u
+}
+
 // SetIntervalSeconds sets the "interval_seconds" field.
 func (_u *ChannelMonitorUpdateOne) SetIntervalSeconds(v int) *ChannelMonitorUpdateOne {
 	_u.mutation.ResetIntervalSeconds()
@@ -1533,6 +1569,11 @@ func (_u *ChannelMonitorUpdateOne) check() error {
 			return &ValidationError{Name: "description_color", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitor.description_color": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ProbeMode(); ok {
+		if err := channelmonitor.ProbeModeValidator(v); err != nil {
+			return &ValidationError{Name: "probe_mode", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitor.probe_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.IntervalSeconds(); ok {
 		if err := channelmonitor.IntervalSecondsValidator(v); err != nil {
 			return &ValidationError{Name: "interval_seconds", err: fmt.Errorf(`ent: validator failed for field "ChannelMonitor.interval_seconds": %w`, err)}
@@ -1656,6 +1697,9 @@ func (_u *ChannelMonitorUpdateOne) sqlSave(ctx context.Context) (_node *ChannelM
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(channelmonitor.FieldEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProbeMode(); ok {
+		_spec.SetField(channelmonitor.FieldProbeMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.IntervalSeconds(); ok {
 		_spec.SetField(channelmonitor.FieldIntervalSeconds, field.TypeInt, value)

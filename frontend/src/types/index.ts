@@ -1839,6 +1839,7 @@ export interface UsageLog {
   duration_ms: number | null
   first_token_ms: number | null
   output_duration_ms?: number | null
+  rate_observation?: { version: number; request_duration_ms?: number; timing_scope?: 'app_request' | 'ws_turn'; window_ms?: number; output_events: number; event_span_ms: number; output_bytes: number; max_burst_bytes: number; quality: string } | null
 
   // 图片生成字段
   image_count: number

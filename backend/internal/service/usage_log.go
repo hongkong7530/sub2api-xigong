@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 	"strings"
 	"time"
 )
@@ -181,6 +182,7 @@ type UsageLog struct {
 	DurationMs         *int
 	FirstTokenMs       *int
 	OutputDurationMs   *int
+	RateObservation    *ratemetric.Observation
 	UserAgent          *string
 	IPAddress          *string
 	// SessionID is the explicit client-provided request correlation identifier

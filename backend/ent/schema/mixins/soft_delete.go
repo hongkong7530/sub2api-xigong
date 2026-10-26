@@ -76,6 +76,12 @@ func SkipSoftDelete(parent context.Context) context.Context {
 	return context.WithValue(parent, softDeleteKey{}, true)
 }
 
+// IsSoftDeleteSkipped 让直接 SQL 读取保留与 Ent 遍历相同的可见性。
+func IsSoftDeleteSkipped(ctx context.Context) bool {
+	skip, _ := ctx.Value(softDeleteKey{}).(bool)
+	return skip
+}
+
 // Interceptors 返回查询拦截器列表。
 // 拦截器会自动为所有查询添加 deleted_at IS NULL 条件，
 // 确保软删除的记录不会出现在普通查询结果中。

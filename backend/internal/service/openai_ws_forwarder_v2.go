@@ -39,6 +39,8 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}
 	responseModelObserver := &upstreamResponseModelObserver{}
+	// The pool queues payloads without socket-read timestamps. Consumer spacing is not arrival evidence.
+	responseModelObserver.outputWindow.arrivals.MarkTimingUncertain()
 
 	wsURL, err := s.buildOpenAIResponsesWSURL(account)
 	if err != nil {
@@ -435,6 +437,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			Duration:                      time.Since(startTime),
 			FirstTokenMs:                  firstTokenMs,
 			OutputDurationMs:              responseModelObserver.outputWindow.durationMs(),
+			RateObservation:               responseModelObserver.outputWindow.rateObservation(),
 			ClientDisconnect:              clientDisconnected,
 		}
 	}

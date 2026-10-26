@@ -4,6 +4,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChannelMonitorView from '../ChannelMonitorView.vue'
 import MonitorFiltersBar from '@/components/admin/monitor/MonitorFiltersBar.vue'
+import MonitorAutoProvisionDialog from '@/components/admin/monitor/MonitorAutoProvisionDialog.vue'
+const selections = [{ group_id: 1, probe_mode: 'passive' as const, interval_seconds: 120 }]
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), automate: vi.fn(), showError: vi.fn(), v1: true,
@@ -32,7 +34,7 @@ function mountView() {
     global: { stubs: {
       AppLayout: layout, TablePageLayout: tableLayout, DataTable: true, Pagination: true,
       ConfirmDialog: true, EmptyState: true, HelpTooltip: true, Icon: true, Toggle: true, Select: true,
-      MonitorFormDialog: true, MonitorTemplateManagerDialog: true, MonitorRunResultDialog: true,
+      MonitorFormDialog: true, MonitorTemplateManagerDialog: true, MonitorRunResultDialog: true, MonitorAutoProvisionDialog: true,
       MonitorSettingsPanel: { template: '<div data-testid="v2-panel"/>' },
       MonitorGroupInsightCard: { props: ['groupId'], template: '<div data-testid="insight"/>' },
     } },
@@ -83,7 +85,9 @@ describe('channel monitor automation end-to-end view wiring', () => {
     await flushPromises()
     const filters = wrapper.getComponent(MonitorFiltersBar)
     filters.vm.$emit('auto-provision')
-    filters.vm.$emit('auto-provision')
+    expect(mocks.automate).not.toHaveBeenCalled()
+    wrapper.getComponent(MonitorAutoProvisionDialog).vm.$emit('submit', selections)
+    wrapper.getComponent(MonitorAutoProvisionDialog).vm.$emit('submit', selections)
     await wrapper.vm.$nextTick()
     expect(mocks.automate).toHaveBeenCalledTimes(1)
     expect(filters.find('[aria-busy="true"]').exists()).toBe(true)
@@ -106,6 +110,7 @@ describe('channel monitor automation end-to-end view wiring', () => {
     const wrapper = mountView()
     await flushPromises()
     wrapper.getComponent(MonitorFiltersBar).vm.$emit('auto-provision')
+    wrapper.getComponent(MonitorAutoProvisionDialog).vm.$emit('submit', selections)
     await flushPromises()
     expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Created group')
     expect(mocks.showError).toHaveBeenCalledWith('refresh failed')
@@ -117,9 +122,11 @@ describe('channel monitor automation end-to-end view wiring', () => {
     const wrapper = mountView()
     await flushPromises()
     wrapper.getComponent(MonitorFiltersBar).vm.$emit('auto-provision')
+    wrapper.getComponent(MonitorAutoProvisionDialog).vm.$emit('submit', selections)
     await flushPromises()
     expect(mocks.showError).toHaveBeenCalledWith('admin.channelMonitor.autoProvision.requestFailed')
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    expect(wrapper.getComponent(MonitorAutoProvisionDialog).props('show')).toBe(true)
     wrapper.unmount()
   })
 })

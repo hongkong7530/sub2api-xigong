@@ -52,6 +52,7 @@ func (r *channelMonitorRepository) Create(ctx context.Context, m *service.Channe
 		SetDescription(strings.TrimSpace(m.Description)).
 		SetDescriptionColor(strings.TrimSpace(m.DescriptionColor)).
 		SetEnabled(m.Enabled).
+		SetProbeMode(service.DefaultMonitorProbeMode(m.ProbeMode)).
 		SetIntervalSeconds(m.IntervalSeconds).
 		SetJitterSeconds(m.JitterSeconds).
 		SetCreatedBy(m.CreatedBy).
@@ -148,6 +149,7 @@ func (r *channelMonitorRepository) Update(ctx context.Context, m *service.Channe
 		SetDescription(strings.TrimSpace(m.Description)).
 		SetDescriptionColor(strings.TrimSpace(m.DescriptionColor)).
 		SetEnabled(m.Enabled).
+		SetProbeMode(service.DefaultMonitorProbeMode(m.ProbeMode)).
 		SetIntervalSeconds(m.IntervalSeconds).
 		SetJitterSeconds(m.JitterSeconds).
 		SetExtraHeaders(channelMonitorHeadersForPersistence(m)).
@@ -191,7 +193,7 @@ func (r *channelMonitorRepository) ListGroupRateHistory(ctx context.Context, gro
 	if limit <= 0 || limit > 500 {
 		limit = 120
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT rate_multiplier, peak_rate_enabled, peak_rate_multiplier, peak_start, peak_end, recorded_at FROM channel_monitor_group_rate_history WHERE group_id=$1 ORDER BY recorded_at DESC,id DESC LIMIT $2`, groupID, limit)
+	rows, err := r.db.QueryContext(ctx, `SELECT rate_multiplier, peak_rate_enabled, peak_rate_multiplier, peak_start, peak_end, recorded_at,NOT EXISTS(SELECT 1 FROM channel_monitor_group_rate_history older WHERE older.group_id=h.group_id AND (older.recorded_at,older.id)<(h.recorded_at,h.id)) FROM channel_monitor_group_rate_history h WHERE group_id=$1 ORDER BY recorded_at DESC,id DESC LIMIT $2`, groupID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list group rate history: %w", err)
 	}
@@ -199,7 +201,7 @@ func (r *channelMonitorRepository) ListGroupRateHistory(ctx context.Context, gro
 	out := make([]*service.ChannelMonitorGroupRatePoint, 0)
 	for rows.Next() {
 		point := &service.ChannelMonitorGroupRatePoint{}
-		if err := rows.Scan(&point.RateMultiplier, &point.PeakRateEnabled, &point.PeakRateMultiplier, &point.PeakStart, &point.PeakEnd, &point.RecordedAt); err != nil {
+		if err := rows.Scan(&point.RateMultiplier, &point.PeakRateEnabled, &point.PeakRateMultiplier, &point.PeakStart, &point.PeakEnd, &point.RecordedAt, &point.IsInitial); err != nil {
 			return nil, err
 		}
 		out = append(out, point)
@@ -209,7 +211,7 @@ func (r *channelMonitorRepository) ListGroupRateHistory(ctx context.Context, gro
 
 // Legacy probe rates use a different timing window; do not relabel historical data.
 func currentMonitorProbeRate(rate *float64, version *int16) *float64 {
-	if version == nil || *version != 1 {
+	if version == nil || *version != 2 {
 		return nil
 	}
 	return rate
@@ -395,7 +397,7 @@ func (r *channelMonitorRepository) InsertHistoryBatch(ctx context.Context, rows 
 			c = c.SetFirstTokenMs(*row.FirstTokenMs)
 		}
 		if row.OutputTokensPerSecond != nil {
-			c = c.SetOutputTokensPerSecond(*row.OutputTokensPerSecond).SetOutputRateVersion(1)
+			c = c.SetOutputTokensPerSecond(*row.OutputTokensPerSecond).SetOutputRateVersion(2)
 		}
 		if row.Quota != nil {
 			c = c.SetQuota(row.Quota)
@@ -454,7 +456,7 @@ func (r *channelMonitorRepository) ListHistory(ctx context.Context, monitorID in
 func (r *channelMonitorRepository) ListLatestPerModel(ctx context.Context, monitorID int64) ([]*service.ChannelMonitorLatest, error) {
 	const q = `
 		SELECT DISTINCT ON (model)
-		    model, status, latency_ms, first_token_ms, CASE WHEN output_rate_version=1 THEN output_tokens_per_second ELSE NULL END, checked_at
+		    model, status, latency_ms, first_token_ms, CASE WHEN output_rate_version=2 THEN output_tokens_per_second ELSE NULL END, checked_at
 		FROM channel_monitor_histories
 		WHERE monitor_id = $1
 		ORDER BY model, checked_at DESC
@@ -579,7 +581,7 @@ func (r *channelMonitorRepository) ListLatestForMonitorIDs(ctx context.Context, 
 	}
 	const q = `
 		SELECT DISTINCT ON (monitor_id, model)
-		    monitor_id, model, status, latency_ms, first_token_ms, CASE WHEN output_rate_version=1 THEN output_tokens_per_second ELSE NULL END, checked_at, quota
+		    monitor_id, model, status, latency_ms, first_token_ms, CASE WHEN output_rate_version=2 THEN output_tokens_per_second ELSE NULL END, checked_at, quota
 		FROM channel_monitor_histories
 		WHERE monitor_id = ANY($1)
 		ORDER BY monitor_id, model, checked_at DESC
@@ -643,7 +645,7 @@ func (r *channelMonitorRepository) ListRecentHistoryForMonitors(
 		           h.status,
 		           h.latency_ms,
 		           h.first_token_ms,
-		           CASE WHEN h.output_rate_version=1 THEN h.output_tokens_per_second ELSE NULL END AS output_tokens_per_second,
+		           CASE WHEN h.output_rate_version=2 THEN h.output_tokens_per_second ELSE NULL END AS output_tokens_per_second,
 		           h.checked_at,
 		           ROW_NUMBER() OVER (PARTITION BY h.monitor_id ORDER BY h.checked_at DESC) AS rn
 		    FROM channel_monitor_histories h
@@ -947,6 +949,7 @@ func entToServiceMonitor(row *dbent.ChannelMonitor) *service.ChannelMonitor {
 		Description:          row.Description,
 		DescriptionColor:     row.DescriptionColor,
 		Enabled:              row.Enabled,
+		ProbeMode:            service.DefaultMonitorProbeMode(row.ProbeMode),
 		IntervalSeconds:      row.IntervalSeconds,
 		JitterSeconds:        row.JitterSeconds,
 		LastCheckedAt:        row.LastCheckedAt,

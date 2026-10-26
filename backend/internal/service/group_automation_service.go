@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -290,8 +291,15 @@ func autoMonitorName(groupName string) string {
 	return name + " · 自动监控"
 }
 
-// AutoProvisionPublicGroups 扫描全部公开分组并补齐监控与广场条目。
-func (s *GroupAutomationService) AutoProvisionPublicGroups(ctx context.Context, operatorID int64) (*GroupAutomationReport, error) {
+// GroupAutomationSelection is explicit per-group intent; omitted groups are untouched.
+type GroupAutomationSelection struct {
+	GroupID         int64  `json:"group_id"`
+	ProbeMode       string `json:"probe_mode"`
+	IntervalSeconds int    `json:"interval_seconds"`
+}
+
+// AutoProvisionPublicGroups provisions only the selected public groups.
+func (s *GroupAutomationService) AutoProvisionPublicGroups(ctx context.Context, operatorID int64, selections ...GroupAutomationSelection) (*GroupAutomationReport, error) {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	release, ok := s.acquireMutation(ctx)
@@ -302,6 +310,32 @@ func (s *GroupAutomationService) AutoProvisionPublicGroups(ctx context.Context, 
 	groups, err := s.groupRepo.ListActive(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list active groups: %w", err)
+	}
+	if len(selections) == 0 || len(selections) > 500 {
+		return nil, infraerrors.BadRequest("GROUP_SELECTION_REQUIRED", "Select at least one public group (maximum 500)")
+	}
+	selected := make(map[int64]GroupAutomationSelection, len(selections))
+	eligible := make(map[int64]bool, len(groups))
+	for _, g := range groups {
+		if !g.IsExclusive {
+			eligible[g.ID] = true
+		}
+	}
+	for _, choice := range selections {
+		if !eligible[choice.GroupID] {
+			return nil, infraerrors.BadRequest("INVALID_PUBLIC_GROUP", "Selected group is not active and public")
+		}
+		if _, exists := selected[choice.GroupID]; exists {
+			return nil, infraerrors.BadRequest("DUPLICATE_GROUP_SELECTION", "Group selected more than once")
+		}
+		choice.ProbeMode = DefaultMonitorProbeMode(choice.ProbeMode)
+		if err := validateMonitorProbeMode(choice.ProbeMode, &choice.GroupID, MonitorCheckModeProbe); err != nil {
+			return nil, err
+		}
+		if err := validateInterval(choice.IntervalSeconds); err != nil {
+			return nil, err
+		}
+		selected[choice.GroupID] = choice
 	}
 	boundIDs, err := s.monitorService.BoundGroupIDs(ctx)
 	if err != nil {
@@ -330,20 +364,49 @@ func (s *GroupAutomationService) AutoProvisionPublicGroups(ctx context.Context, 
 			// 专属分组不公开，不纳入自动化范围。
 			continue
 		}
+		choice, chosen := selected[g.ID]
+		if !chosen {
+			continue
+		}
 		report.GroupsScanned++
 
 		// 模型候选按需拉取一次，监控与广场两个动作共用（显式映射优先）。
 		loadModels := s.groupModelLoader(ctx, g)
 
-		s.ensureGroupMonitor(ctx, g, bound, loadModels, operatorID, report)
+		s.ensureGroupMonitor(ctx, g, bound, loadModels, operatorID, report, choice)
 		s.ensurePlazaChannel(ctx, g, loadModels, report)
 	}
 	return report, nil
 }
 
-func (s *GroupAutomationService) ensureGroupMonitor(ctx context.Context, g *Group, bound map[int64]struct{}, loadModels func() ([]string, error), operatorID int64, report *GroupAutomationReport) {
+func (s *GroupAutomationService) ensureGroupMonitor(ctx context.Context, g *Group, bound map[int64]struct{}, loadModels func() ([]string, error), operatorID int64, report *GroupAutomationReport, selections ...GroupAutomationSelection) {
+	choice := GroupAutomationSelection{GroupID: g.ID, ProbeMode: MonitorProbeModeHybrid, IntervalSeconds: autoMonitorIntervalSeconds}
+	if len(selections) > 0 {
+		choice = selections[0]
+	}
 	item := GroupAutomationItem{GroupID: g.ID, GroupName: g.Name}
 	if _, ok := bound[g.ID]; ok {
+		if len(selections) > 0 {
+			existing, err := s.monitorService.repo.GetAutoByGroupID(ctx, g.ID)
+			if err == nil && existing.Description == autoGroupMonitorDescription {
+				mode := DefaultMonitorProbeMode(choice.ProbeMode)
+				interval := choice.IntervalSeconds
+				if DefaultMonitorProbeMode(existing.ProbeMode) != mode || existing.IntervalSeconds != interval {
+					_, err = s.monitorService.Update(ctx, existing.ID, ChannelMonitorUpdateParams{ProbeMode: &mode, IntervalSeconds: &interval})
+					if err != nil {
+						item.Action, item.Detail = "monitor_error", err.Error()
+					} else {
+						item.Action, item.Detail = "monitor_updated", "已更新所选监控的模式与探测间隔"
+					}
+					report.Items = append(report.Items, item)
+					return
+				}
+			} else if err != nil && !errors.Is(err, ErrChannelMonitorNotFound) {
+				item.Action, item.Detail = "monitor_error", err.Error()
+				report.Items = append(report.Items, item)
+				return
+			}
+		}
 		repaired, err := s.monitorService.repairIncompleteAutoMonitor(ctx, g.ID)
 		switch {
 		case err != nil:
@@ -363,7 +426,11 @@ func (s *GroupAutomationService) ensureGroupMonitor(ctx context.Context, g *Grou
 		report.Items = append(report.Items, item)
 		return
 	}
-	models, err := loadModels()
+	models := []string{"passive"}
+	var err error
+	if choice.ProbeMode != MonitorProbeModePassive {
+		models, err = loadModels()
+	}
 	if err != nil {
 		item.Action = "monitor_error"
 		item.Detail = err.Error()
@@ -382,7 +449,9 @@ func (s *GroupAutomationService) ensureGroupMonitor(ctx context.Context, g *Grou
 	}
 	groupID := g.ID
 	primary := &ChannelMonitor{PrimaryModel: models[0], GroupID: &groupID}
-	s.monitorService.selectPopularMonitorModel(ctx, primary, models)
+	if choice.ProbeMode != MonitorProbeModePassive {
+		s.monitorService.selectPopularMonitorModel(ctx, primary, models)
+	}
 	// OpenAI 系优先 Responses 协议探测；国产 provider（kimi/zhipu/deepseek）保持 Chat Completions。
 	apiMode := ""
 	if provider == MonitorProviderOpenAI {
@@ -400,7 +469,8 @@ func (s *GroupAutomationService) ensureGroupMonitor(ctx context.Context, g *Grou
 		KeyProvisionMode: "auto",
 		Description:      autoGroupMonitorDescription,
 		Enabled:          true,
-		IntervalSeconds:  autoMonitorIntervalSeconds,
+		ProbeMode:        choice.ProbeMode,
+		IntervalSeconds:  choice.IntervalSeconds,
 		JitterSeconds:    autoMonitorJitterSeconds,
 		CreatedBy:        operatorID,
 	})

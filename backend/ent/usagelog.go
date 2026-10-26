@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ratemetric"
 )
 
 // UsageLog is the model entity for the UsageLog schema.
@@ -91,6 +92,8 @@ type UsageLog struct {
 	DurationMs *int `json:"duration_ms,omitempty"`
 	// OutputDurationMs holds the value of the "output_duration_ms" field.
 	OutputDurationMs *int `json:"output_duration_ms,omitempty"`
+	// RateObservation holds the value of the "rate_observation" field.
+	RateObservation *ratemetric.Observation `json:"rate_observation,omitempty"`
 	// FirstTokenMs holds the value of the "first_token_ms" field.
 	FirstTokenMs *int `json:"first_token_ms,omitempty"`
 	// UserAgent holds the value of the "user_agent" field.
@@ -202,7 +205,7 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case usagelog.FieldImageSizeBreakdown:
+		case usagelog.FieldRateObservation, usagelog.FieldImageSizeBreakdown:
 			values[i] = new([]byte)
 		case usagelog.FieldUpstreamModelMismatch, usagelog.FieldLongContextBillingApplied, usagelog.FieldStream, usagelog.FieldCacheTTLOverridden:
 			values[i] = new(sql.NullBool)
@@ -451,6 +454,14 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.OutputDurationMs = new(int)
 				*_m.OutputDurationMs = int(value.Int64)
+			}
+		case usagelog.FieldRateObservation:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field rate_observation", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.RateObservation); err != nil {
+					return fmt.Errorf("unmarshal field rate_observation: %w", err)
+				}
 			}
 		case usagelog.FieldFirstTokenMs:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -735,6 +746,9 @@ func (_m *UsageLog) String() string {
 		builder.WriteString("output_duration_ms=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("rate_observation=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RateObservation))
 	builder.WriteString(", ")
 	if v := _m.FirstTokenMs; v != nil {
 		builder.WriteString("first_token_ms=")

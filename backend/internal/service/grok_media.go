@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
+	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -854,8 +856,13 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 
 	contentURL, err := grokMediaSignedVideoContentURL(statusBody, requestID)
 	if err != nil {
-		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
-		return nil, err
+		// Custom relays may expose a different CDN. Never fetch that status hint
+		// directly: ask the configured, authenticated content endpoint instead.
+		if _, publicErr := grokMediaPublicContentURL(gjson.GetBytes(statusBody, "video.url").String()); publicErr != nil {
+			SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+			return nil, err
+		}
+		contentURL = ""
 	}
 	signedContent := contentURL != ""
 	if !signedContent {
@@ -866,8 +873,12 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		}
 	}
 
+	contentCtx := WithHTTPUpstreamRedirectsDisabled(upstreamCtx)
+	if signedContent {
+		contentCtx = WithHTTPUpstreamPublicHostsOnly(contentCtx)
+	}
 	contentReq, err := http.NewRequestWithContext(
-		WithHTTPUpstreamRedirectsDisabled(upstreamCtx),
+		contentCtx,
 		http.MethodGet,
 		contentURL,
 		nil,
@@ -895,13 +906,58 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 	}
+	// Only the configured authenticated endpoint may delegate once to a public
+	// HTTPS CDN. A fresh request cannot leak API credentials or account headers.
+	if !signedContent && isGrokMediaContentRedirect(contentResp.StatusCode) {
+		location, locationErr := url.Parse(contentResp.Header.Get("Location"))
+		_ = contentResp.Body.Close()
+		if locationErr != nil || strings.TrimSpace(contentResp.Header.Get("Location")) == "" {
+			return nil, fmt.Errorf("grok media content redirect is invalid")
+		}
+		redirectURL, validateErr := grokMediaPublicContentURL(contentReq.URL.ResolveReference(location).String())
+		if validateErr != nil {
+			return nil, validateErr
+		}
+		cdnReq, reqErr := http.NewRequestWithContext(
+			WithHTTPUpstreamPublicHostsOnly(WithHTTPUpstreamRedirectsDisabled(upstreamCtx)),
+			http.MethodGet, redirectURL, nil,
+		)
+		if reqErr != nil {
+			return nil, fmt.Errorf("grok media content redirect is invalid")
+		}
+		cdnReq.Header.Set("Accept", "video/*, application/octet-stream")
+		if value := contentReq.Header.Get("Range"); value != "" {
+			cdnReq.Header.Set("Range", value)
+		}
+		contentResp, err = s.httpUpstream.Do(cdnReq, proxyURL, account.ID, account.Concurrency)
+		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+		if err != nil {
+			setOpsUpstreamError(c, http.StatusBadGateway, "Video content download unavailable", "")
+			return nil, fmt.Errorf("grok media content download unavailable")
+		}
+		signedContent = true
+	}
 	defer func() { _ = contentResp.Body.Close() }()
 	contentRequestID := firstNonEmpty(contentResp.Header.Get("x-request-id"), contentResp.Header.Get("xai-request-id"), statusRequestID)
 	if contentResp.StatusCode >= 300 && contentResp.StatusCode < 400 {
 		return nil, fmt.Errorf("grok media signed content redirect is not allowed")
 	}
 	if contentResp.StatusCode >= 400 && contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+		if signedContent {
+			// A CDN challenge is a download failure, not evidence that the API
+			// account is invalid. Do not disable its unrelated text/image traffic.
+			setOpsUpstreamError(c, contentResp.StatusCode, "Video content download unavailable", "")
+			MarkResponseCommitted(c)
+			writeGrokMediaErrorResponse(c, http.StatusBadGateway, "video_content_unavailable", "Video content download unavailable")
+			return nil, fmt.Errorf("grok media content download unavailable")
+		}
 		return s.handleGrokMediaErrorResponse(ctx, contentResp, c, account, contentRequestID, "")
+	}
+	if contentResp.StatusCode != http.StatusRequestedRangeNotSatisfiable {
+		if err := validateGrokMediaContentResponse(contentResp); err != nil {
+			setOpsUpstreamError(c, http.StatusBadGateway, "Upstream returned non-video content", "")
+			return nil, err
+		}
 	}
 
 	s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, ""), account, contentResp.Header, contentResp.StatusCode)
@@ -927,6 +983,59 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
 		result.VideoDurationSeconds = billed.VideoDurationSeconds
 	}
 	return result, nil
+}
+
+func isGrokMediaContentRedirect(status int) bool {
+	return status == http.StatusMovedPermanently || status == http.StatusFound ||
+		status == http.StatusSeeOther || status == http.StatusTemporaryRedirect || status == http.StatusPermanentRedirect
+}
+
+// Validate without normalizing the path/query: CDN signatures cover their exact bytes.
+// The shared upstream transport additionally checks resolved IPs for the marked request.
+func grokMediaPublicContentURL(rawURL string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.User != nil || parsed.Fragment != "" ||
+		!strings.EqualFold(parsed.Scheme, "https") || (parsed.Port() != "" && parsed.Port() != "443") {
+		return "", fmt.Errorf("grok media content redirect must use public HTTPS")
+	}
+	if _, err := urlvalidator.ValidateHTTPSURL(rawURL, urlvalidator.ValidationOptions{}); err != nil {
+		return "", fmt.Errorf("grok media content redirect must use public HTTPS")
+	}
+	return parsed.String(), nil
+}
+
+func validateGrokMediaContentResponse(resp *http.Response) error {
+	if resp == nil || resp.Body == nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
+		return fmt.Errorf("grok media content response is incomplete")
+	}
+	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if mediaType != "" && mediaType != "application/octet-stream" && !strings.HasPrefix(mediaType, "video/") {
+		return fmt.Errorf("grok media upstream returned non-video content")
+	}
+	reader := bufio.NewReader(resp.Body)
+	prefix, err := reader.Peek(512)
+	if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
+		return fmt.Errorf("grok media content response could not be read")
+	}
+	if len(prefix) == 0 {
+		return fmt.Errorf("grok media upstream returned non-video content")
+	}
+	// A nonzero byte range has no file signature: compressed video bytes may
+	// coincidentally resemble HTML or JSON. Inspect only the start of the file.
+	var rangeStart, rangeEnd int64
+	var rangeTotal string
+	parts, _ := fmt.Sscanf(strings.TrimSpace(resp.Header.Get("Content-Range")), "bytes %d-%d/%s", &rangeStart, &rangeEnd, &rangeTotal)
+	fileStart := resp.StatusCode != http.StatusPartialContent || parts != 3 || rangeStart <= 0 || rangeEnd < rangeStart
+	trimmed := bytes.TrimSpace(prefix)
+	if fileStart && (strings.HasPrefix(http.DetectContentType(prefix), "text/html") ||
+		bytes.HasPrefix(trimmed, []byte("{")) || bytes.HasPrefix(trimmed, []byte("["))) {
+		return fmt.Errorf("grok media upstream returned non-video content")
+	}
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{reader, resp.Body}
+	return nil
 }
 
 func grokMediaSignedVideoContentURL(body []byte, requestID string) (string, error) {
