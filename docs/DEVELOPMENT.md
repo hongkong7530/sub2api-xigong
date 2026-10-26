@@ -2,8 +2,8 @@
 
 ## 工具链
 
-- Go **1.27.2**，以 `backend/go.mod` 为准。
-- Node.js **20+**、pnpm **9**；Docker 构建使用 Node 24。
+- Go **1.27.3**，以 `backend/go.mod` 为准。
+- Node.js **24**（与 Docker 构建一致）、pnpm **9**。锁定依赖含 Node >=22 要求，不再声明 Node 20 支持；其他组合须自行验证。
 - PostgreSQL、Redis；集成测试通常需要 Docker/Testcontainers。
 - Linux 发行目标建议 `CGO_ENABLED=0`，前端嵌入必须使用 `-tags embed`。
 

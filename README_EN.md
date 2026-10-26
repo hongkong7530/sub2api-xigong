@@ -6,6 +6,10 @@
 
 ![Actual live demo homepage](docs/screenshots/home-desktop.png)
 
+## Source update · 2026-10-26
+
+Version `0.2.18-custom-cluster-v3` integrates upstream v0.2.18. This update adds cost-versioned profit reporting, read-only SubNexus APIs, selectable passive/hybrid monitoring, rate history, independent throughput observations, safer Grok downloads, and cluster capacity/settlement recovery fixes. See the [21-feature guide](docs/CUSTOM_FEATURES.md), [changelog](CHANGELOG.md), and [API reference](docs/SUBNEXUS_API.md). This is a source release, not a new production rollout.
+
 ## Highlights
 
 - Immersive wallpaper-based homepage, liquid-glass surfaces, particle branding, responsive layouts and motion controls.
@@ -34,7 +38,7 @@ Open `http://127.0.0.1:8080`, locally or through an SSH tunnel. Read the [deploy
 
 ## Development
 
-Use Go **1.27.2**, Node.js **20+** and pnpm **9**. Install frontend dependencies with the frozen lockfile; run the frontend build before `go build -tags embed`. The frontend outputs directly into `backend/internal/web/dist`.
+Use Go **1.27.3**, Node.js **24** and pnpm **9**. Install frontend dependencies with the frozen lockfile; run the frontend build before `go build -tags embed`. The frontend outputs directly into `backend/internal/web/dist`.
 
 See [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md) and [known limitations](docs/KNOWN_LIMITATIONS.md). Do not replace this customized binary using the upstream in-app updater.
 

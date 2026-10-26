@@ -9,7 +9,7 @@
 在 Sub2API 的多模型 API 网关之上，加入沉浸式首页、液态玻璃控制台、渠道状态、模型广场与集群增强。
 
 [![License](https://img.shields.io/badge/license-LGPL--3.0-blue)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.27.2-00ADD8?logo=go&logoColor=white)](backend/go.mod)
+[![Go](https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white)](backend/go.mod)
 [![Vue](https://img.shields.io/badge/Vue-3.5-42b883?logo=vuedotjs&logoColor=white)](frontend/package.json)
 [![Demo](https://img.shields.io/badge/Live-xigong.cloud-75d5da)](https://xigong.cloud)
 
@@ -21,6 +21,14 @@
 
 > **独立社区定制版，不是上游官方发行版。** 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，保留上游版权与 LGPL-3.0 许可；感谢上游作者和全部贡献者。演示站是正在运行的业务站点，不提供公开管理员账号，请勿压测、扫描或提交真实敏感信息。
 
+## 当前源码：0.2.18-custom-cluster-v3 · 2026-10-26
+
+本次同步上游 v0.2.18 与最新西宫定制源码，新增收益系统、SubNexus 只读机器人接口、可选主被动监控、倍率历史、独立速率观测，并包含 Grok 下载、集群容量和结算恢复修复。
+
+**[21 项功能逐项说明](docs/CUSTOM_FEATURES.md) · [本次变更与迁移](CHANGELOG.md) · [机器人 API](docs/SUBNEXUS_API.md)**
+
+仅发布源码，不执行生产部署；既有截图保留原拍摄时间，不冒充本次新功能截图。
+
 ## 有什么不同
 
 | 方向 | 定制能力 |
@@ -30,6 +38,7 @@
 | 渠道可观测性 | 真实请求与主动探测结合、历史状态、首字与输出速率、公开首页状态卡、公开分组自动配给 |
 | 模型与价格 | 模型广场、分组模型白名单、自定义价卡、长上下文阈值、Fast/Flex/Ultrafast 档位策略与标识 |
 | 用户工作流 | 分组分类、API 密钥夹、Key 级提示词模板、用量费用与缓存统计 |
+| 收益与集成 | 分组成本版本、收益管理/公示、个人累计收益、独立授权的八类机器人只读查询 |
 | 多节点 | 入口/控制器/工作节点/迁移器角色、mTLS、准入控制、幂等结算与本地恢复槽、集群控制台 |
 
 保留上游的账号池、OAuth/API Key、兼容协议转发、计费、支付、权限和后台管理能力。完整说明与限制见 [功能说明](docs/FEATURES.md)。提示词模板不保证模型行为，也不绕过服务商条款。

@@ -23,6 +23,10 @@
 
 `frontend/public/experience/fonts/` 内为 QiuYeYuanTi 16 的自托管 WOFF2 子集，原附许可为 SIL Open Font License。原始 `OFL.txt` 随字体保留；以该文件的版权、保留名称及许可全文为准。不要删除字体声明或将其误标为项目自制字体。
 
+## 收益页面角色素材
+
+`frontend/public/experience/profit/` 的九张 WebP 为 Niabot 的 **Girl in chibi style.svg** 改色衍生，不是模型供应商官方形象。遵守 CC BY-SA 3.0，目录内 `LICENSE.txt` 与 `sources.json` 保留原图链接、作者、许可、修改说明和 SHA-256。再分发衍生素材时须保留署名与相同许可；项目代码的 LGPL 不替代该素材许可。
+
 ## 图标与依赖
 
 上游 Sub2API 标识保留用于来源识别，不表示上游背书。npm/Go 依赖、图标集合遵循各自许可证；使用者应结合锁文件和所分发制品履行依赖义务。
